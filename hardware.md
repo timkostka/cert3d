@@ -42,6 +42,8 @@ I managed to get this working just fine using the TIM1 timer in IC mode for two 
 
 What resolution should results be stored as?  If i use uint32_t and a tick of 180 MHz, this will overflow around 24sec.  So I could use uint64_t instead, although it's a bit clunky.  If I convert to float, then I lose some resolution.
 
+Another option is to output only the delta between pulses.  I could use a uint16_t, and use 0 to indicate that there was no change for 2^16 ticks.  That is way more memory efficient.  2^16 ticks at 180MHz is 0.4ms, which is a bit low.  So maybe use uint32_t to reduce the number of zeros.
+
 ### Plotting results
 
 Results should be output in a variety of modes.  One of those should be an oscilloscope-type mode where edges are shown.  This may be fun to develop.
