@@ -38,6 +38,8 @@ class ScopePanel(wx.Panel):
         self.padding = 10
         # padding between name and channel data
         self.padding2 = 5
+        # padding around timestamp label
+        self.padding_timestamp_label = 2
         # length of channel
         self.channel_length = 150
         # leftmost time
@@ -51,6 +53,25 @@ class ScopePanel(wx.Panel):
         self.selecting_time = False
         # time selection memory
         self.snap_distance = 10
+        # font for labels
+        self.font_label = wx.Font(
+                9,
+                wx.FONTFAMILY_MODERN,
+                wx.FONTSTYLE_NORMAL,
+                wx.FONTWEIGHT_NORMAL,
+                False,
+                "Consolas",
+            )
+
+        # font for timestamps
+        self.font_timestamp = wx.Font(
+                7,
+                wx.FONTFAMILY_MODERN,
+                wx.FONTSTYLE_NORMAL,
+                wx.FONTWEIGHT_NORMAL,
+                False,
+                "Consolas",
+            )
         # either None or (channel_number, time)
         self.snaptime_start = None
         self.snaptime_end = None
@@ -194,6 +215,33 @@ class ScopePanel(wx.Panel):
             w = x2 - x - 1
         dc.DrawRectangle(x, y, w, h)
 
+    @staticmethod
+    def time_to_text(time):
+        """Convert the time in seconds to a text value."""
+        if time == 0:
+            return '0'
+        abstime = abs(time)
+        if abstime < 10e-9:
+            return '%.2f ns' % (time * 1e9)
+        elif abstime < 100e-9:
+            return '%.1fns' % (time * 1e9)
+        elif abstime < 1000e9:
+            return '%.0fns' % (time * 1e9)
+        elif abstime < 10e6:
+            return '%.2fus' % (time * 1e9)
+        elif abstime < 100e6:
+            return '%.1fus' % (time * 1e9)
+        elif abstime < 1000e6:
+            return '%.0fus' % (time * 1e9)
+        elif abstime < 10e3:
+            return '%.2fms' % (time * 1e9)
+        elif abstime < 100e3:
+            return '%.1fms' % (time * 1e9)
+        elif abstime < 1000e3:
+            return '%.0fms' % (time * 1e9)
+        else:
+            return '%gs' % time
+
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
         # dc = wx.PaintDC(self)
@@ -275,3 +323,20 @@ class ScopePanel(wx.Panel):
                 dc.DrawLine(x1, y1, x3, y1)
                 dc.DrawLine(x3, y1, x3, y2)
                 dc.DrawLine(x3, y2, x2, y2)
+                # draw time between
+                dc.SetFont(self.font_timestamp)
+                text = self.time_to_text(end_time - start_time)
+                rect = dc.GetFullTextExtent(text)
+                width = rect[0]
+                height = rect[1]
+                width += 2 * self.padding_timestamp_label
+                height += 2 * self.padding_timestamp_label
+                x = x3
+                y = (y1 + y2) / 2
+                x -= width / 2
+                y -= height / 2
+                dc.SetBrush(wx.BLACK_BRUSH)
+                dc.DrawRectangle(x, y, width, height)
+                x += self.padding_timestamp_label
+                y += self.padding_timestamp_label
+                dc.DrawText(text, x, y)
