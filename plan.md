@@ -9,3 +9,15 @@ Within the 3d printer firmware community, there is a lack of verification of sof
 ## Who benefits?
 
 For developers, the testing framework helps identify bugs quickly allowing them to be fixed quickly.  The improved software quality due to this benefits.
+
+## How does it work?
+
+There are two parts to Cert3D--A hardware module and a software program.
+
+### The hardware module
+
+The hardware module is hooked up to the 3d printer board and monitors status of the stepper motors and other peripherals.
+
+### The software program
+
+The software sends runs a series of tests by sending g-code to the 3d printer board.  During these tests, it also reads back information from the hardware module.  It analyses these results to ensure the printer is working as intended.
