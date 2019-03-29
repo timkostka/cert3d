@@ -9,7 +9,7 @@ class ScopeData:
         # number of ticks per second
         self.seconds_per_tick = 1.0 / 180e6
         # starting time in seconds
-        self.start = 0.0
+        self.start_time = 0.0
         # length of each pulse in ticks, starting with low pulse
         self.data = []
         self.invent_data() # DEBUG
@@ -21,4 +21,4 @@ class ScopeData:
     def invent_data(self):
         """Populate with randomly generated data."""
         self.data = [random.randint(1, 10) for _ in range(100)]
-        self.start = 0.0
+        self.start_time = 0.0
