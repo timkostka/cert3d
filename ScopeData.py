@@ -22,3 +22,16 @@ class ScopeData:
         """Populate with randomly generated data."""
         self.data = [random.randint(1, 10) for _ in range(100)]
         self.start_time = 0.0
+
+    def get_closest_edge_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        if len(self.data) == 0:
+            return None
+        time = self.start_time
+        tick_count = 0
+        for ticks in self.data:
+            tick_count += ticks
+            this_time = self.start_time + tick_count * self.seconds_per_tick
+            if abs(this_time - target_time) < abs(time - target_time):
+                time = this_time
+        return time

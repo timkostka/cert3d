@@ -31,11 +31,11 @@ class ScopePanel(wx.Panel):
             channel.name = "DATA%d" % i
         self.channels[0].name = "X_STEP"
         # height of each channel in pixels
-        self.channel_height = 40
+        self.channel_height = 30
         # margin in pixels all around
         self.margin = 5
         # padding between channels
-        self.padding = 5
+        self.padding = 10
         # padding between name and channel data
         self.padding2 = 5
         # length of channel
@@ -44,9 +44,16 @@ class ScopePanel(wx.Panel):
         self.start_time = 0.0
         # seconds per pixel
         self.seconds_per_pixel = 1.0
-        # mouse stuff
+        # mouse panning memory
         self.panning = False
         self.panning_start = 0
+        # true when we're selecting a time delta
+        self.selecting_time = False
+        # time selection memory
+        self.snap_distance = 10
+        # either None or (channel_number, time)
+        self.snaptime_start = None
+        self.snaptime_end = None
         # prevent panel from shrinking too much
         self.SetMinSize((200, 200))
         # set background
@@ -55,6 +62,8 @@ class ScopePanel(wx.Panel):
 
         self.Bind(wx.EVT_PAINT, self.event_paint)
 
+        self.Bind(wx.EVT_LEFT_DOWN, self.event_mouse_left_button_down)
+        self.Bind(wx.EVT_LEFT_UP, self.event_mouse_left_button_up)
         self.Bind(wx.EVT_RIGHT_DOWN, self.event_mouse_right_button_down)
         self.Bind(wx.EVT_RIGHT_UP, self.event_mouse_right_button_up)
         self.Bind(wx.EVT_MOTION, self.event_mouse_motion)
@@ -62,6 +71,51 @@ class ScopePanel(wx.Panel):
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
         self.initialize_viewing_window()
+
+    def find_snaptime(self, position):
+        """Return the snaptime at the given position, or None"""
+        # find correct channel
+        x, y = position
+        channel_number = (y - self.margin) / (
+            self.channel_height + self.padding
+        )
+        if channel_number < 0.0 or channel_number >= len(self.channels):
+            return None
+        channel_index = int(channel_number)
+        channel = self.channels[channel_index]
+        if len(channel.data) < 0:
+            return None
+        # convert pixel position to a time
+        time = self.x_to_time(x)
+        # find closest point in this channel data
+        closest_time = channel.get_closest_edge_time(time)
+        # find delta in pixels
+        pixel_delta = (closest_time - time) / self.seconds_per_pixel
+        if abs(pixel_delta) < self.snap_distance:
+            result = (channel_index, closest_time)
+            print("Pixel delta of", pixel_delta)
+            print("Found snaptime of", result)
+            return result
+        return None
+
+    def event_mouse_left_button_down(self, event):
+        # find closest
+        old_start = self.snaptime_start
+        old_end = self.snaptime_end
+        self.snaptime_start = None
+        self.snaptime_end = None
+        self.snaptime_start = self.find_snaptime(event.GetPosition())
+        if self.snaptime_start != old_start or self.snaptime_end != old_end:
+            self.Refresh()
+        self.selecting_time = bool(self.snaptime_start)
+
+    def event_mouse_left_button_up(self, event):
+        self.selecting_time = False
+        if not self.snaptime_start:
+            return
+        self.snaptime_end = self.find_snaptime(event.GetPosition())
+        if self.snaptime_end:
+            self.Refresh()
 
     def get_time_at_mouse(self, event):
         """Return the time at the mouse coordinates."""
@@ -81,6 +135,11 @@ class ScopePanel(wx.Panel):
             self.start_time -= delta
             self.panning_start += dx
             self.Refresh()
+        if self.snaptime_start and self.selecting_time:
+            new_end = self.find_snaptime(event.GetPosition())
+            if new_end != self.snaptime_end:
+                self.snaptime_end = new_end
+                self.Refresh()
 
     def event_mouse_wheel(self, event):
         """Handle scrolling in/out via the mouse wheel."""
@@ -93,6 +152,24 @@ class ScopePanel(wx.Panel):
         self.start_time += (x - dx) * self.seconds_per_pixel * (1 - scale)
         self.seconds_per_pixel *= scale
         self.Refresh()
+
+    def time_to_x(self, time):
+        """Return the x value corresponding to the given time."""
+        x = self.margin + self.channel_length + self.padding2
+        x += (time - self.start_time) / self.seconds_per_pixel
+        return x
+
+    def x_to_time(self, x):
+        """Return the time value corresponding to the x position."""
+        x -= self.margin + self.channel_length + self.padding2
+        return self.start_time + x * self.seconds_per_pixel
+
+    def get_channel_y_values(self, channel_number):
+        """Return the top and bottom y values for the given channel."""
+        y1 = self.margin + channel_number * (
+            self.padding + self.channel_height
+        )
+        return y1, y1 + self.channel_height - 1
 
     def initialize_viewing_window(self):
         """Initialize the viewing window to see all data."""
@@ -130,7 +207,7 @@ class ScopePanel(wx.Panel):
         # get leftmost pixel we can draw for scope view
         left = self.margin + self.channel_length + self.padding
         # get rightmost pixel to draw for scope view
-        right = self.GetSize()[0] - 1 - self.margin
+        right = self.GetSize()[0] - 1
         for i, channel in enumerate(self.channels):
             # get x,y of middle center
             x = self.margin + self.channel_length
@@ -179,12 +256,22 @@ class ScopePanel(wx.Panel):
                 # dc.DrawRectangle(x1, y1, x2 - x1 + width, width)
                 # dc.DrawLine(x1, y1, x2, y1)
                 x1 = x2
-        return
-
-        # dc.Dra
-
-        dc.SetBrush(wx.RED_BRUSH)
-        dc.DrawRectangle(0, 0, 100, 100)
-        dc.DrawText("Hello!", 20, 20)
-        dc.DrawLine(0, 0, 100, 100)
-        dc.DrawLine(100, 0, 0, 100)
+        # draw snap time
+        if self.snaptime_start:
+            dc.SetPen(wx.Pen(wx.RED, 3))
+            channel_index, start_time = self.snaptime_start
+            x1 = self.time_to_x(start_time)
+            y11, y12 = self.get_channel_y_values(channel_index)
+            y1 = (y11 + y12) / 2
+            dc.DrawLine(x1, y11, x1, y12)
+            if self.snaptime_end:
+                channel_index, end_time = self.snaptime_end
+                x2 = self.time_to_x(end_time)
+                y21, y22 = self.get_channel_y_values(channel_index)
+                y2 = (y21 + y22) / 2
+                dc.DrawLine(x2, y21, x2, y22)
+                # draw line connecting them
+                x3 = (x1 + x2) / 2
+                dc.DrawLine(x1, y1, x3, y1)
+                dc.DrawLine(x3, y1, x3, y2)
+                dc.DrawLine(x3, y2, x2, y2)
