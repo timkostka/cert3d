@@ -135,8 +135,10 @@ class ScopePanel(wx.Panel):
         if not self.snaptime_start:
             return
         self.snaptime_end = self.find_snaptime(event.GetPosition())
-        if self.snaptime_end:
-            self.Refresh()
+        if not self.snaptime_end or self.snaptime_end == self.snaptime_start:
+            self.snaptime_start = None
+            self.snaptime_end = None
+        self.Refresh()
 
     def get_time_at_mouse(self, event):
         """Return the time at the mouse coordinates."""
