@@ -114,8 +114,8 @@ class ScopePanel(wx.Panel):
         pixel_delta = (closest_time - time) / self.seconds_per_pixel
         if abs(pixel_delta) < self.snap_distance:
             result = (channel_index, closest_time)
-            print("Pixel delta of", pixel_delta)
-            print("Found snaptime of", result)
+            # print("Pixel delta of", pixel_delta)
+            # print("Found snaptime of", result)
             return result
         return None
 
@@ -162,6 +162,8 @@ class ScopePanel(wx.Panel):
             new_end = self.find_snaptime(event.GetPosition())
             if new_end != self.snaptime_end:
                 self.snaptime_end = new_end
+                if self.snaptime_end == self.snaptime_start:
+                    self.snaptime_end = None
                 self.Refresh()
 
     def event_mouse_wheel(self, event):
@@ -308,12 +310,12 @@ class ScopePanel(wx.Panel):
                 x1 = x2
         # draw snap time
         if self.snaptime_start:
-            dc.SetPen(wx.Pen(wx.RED, 3))
+            dc.SetPen(wx.Pen(wx.RED, 1))
             channel_index, start_time = self.snaptime_start
             x1 = self.time_to_x(start_time)
             y11, y12 = self.get_channel_y_values(channel_index)
             y1 = (y11 + y12) / 2
-            dc.DrawLine(x1, y11, x1, y12)
+            dc.DrawRectangle(x1, y11, 1, self.channel_height)
             if self.snaptime_end:
                 channel_index, end_time = self.snaptime_end
                 x2 = self.time_to_x(end_time)
