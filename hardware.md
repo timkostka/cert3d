@@ -47,3 +47,50 @@ Another option is to output only the delta between pulses.  I could use a uint16
 ### Plotting results
 
 Results should be output in a variety of modes.  One of those should be an oscilloscope-type mode where edges are shown.  This may be fun to develop.
+
+## Hardware pins
+
+What is actually needed to monitor/simulate a 3d printer board?
+
+* (8 high-speed pins, 4 slower pins) Monitor X, Y, Z, and E stepper motors
+  * Per motor, need STEP and DIR hooked up to timer IC inputs.  Can monitor EN with a slower GPIO pin.
+* (2 pins) X and Y end-stops
+* (2 pins) SWD interface
+* (2 pins) UART debug input/output
+* (1 pin) Error-indicating LED
+* (1 pin) monitor bed heating on/off
+* (2 pins) monitor fans?
+* (2 DAC pins) simulate bed and hot end thermistors
+* (1 pin) monitor hot end heater on/off
+* (1 pin) simulate EZABL type bed leveler
+
+### How to simulate a thermistor?
+
+The common thermistors used in 3D printers are 10kOhm at room temp and go lower than this as they heat up, becoming as low as 220 Ohm at 150C.
+
+A 10kOhm digital potentiometer might work well.
+
+On the board (Duet 2 Wifi), thermistors are connected in the following circuit:
+```
+                        [3.3V]
+                          |
+                    [4.7kOhm 0.1%]
+                          | 
+MCU PIN>---+---[10kOhm]---+---[THERMISTOR]---+
+           |                                 |
+           = [2.2uF]                         |
+           |                                 |
+          GND                               GND
+```
+
+So the voltage on the thermistor shouldn't go over 2.24V.  If shorted, the current through it will be 0.7mA.
+
+There are a few issues with using digipots for this.  First, the tolerance is awful, typically 20-30% and quite nonlinear.  Second, the number of taps is limited.  With 256 taps, the resistance increment would be 39 Ohm.  This is the difference between 225C and 265C.
+
+One option would be using two digipots in series to get better resolution.  If we had a 10kOhm and a 1kOhm in series.  But 1kOhm are expensive.  No good solution that I can see.
+
+For the bed, a digipot is probably fine.
+
+I could use a DAC.  The STM32F4 has a 12-bit DAC.  This gives a resolution of 0.8 mV.  This is way better.  This may vary depending on how boards are set up, but it's doable.
+
+With 2 DACs, we can simualte 2 thermistors.
