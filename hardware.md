@@ -67,18 +67,18 @@ What is actually needed to monitor/simulate a 3d printer board?
 
 ### How to simulate a thermistor?
 
-The common thermistors used in 3D printers are 10kOhm at room temp and go lower than this as they heat up, becoming as low as 220 Ohm at 150C.
+The common thermistors used in 3D printers are 100kOhm at room temp and go lower than this as they heat up, becoming as low as 220 Ohm at 150C.
 
-A 10kOhm digital potentiometer might work well.
+A 100kOhm digital potentiometer might work well.
 
 On the board (Duet 2 Wifi), thermistors are connected in the following circuit:
 
 ```
-                        [3.3V]
-                          |
-                    [4.7kOhm 0.1%]
-                          | 
-MCU PIN>---+---[10kOhm]---+---[THERMISTOR]---+
+                         [3.3V]
+                           |
+                     [4.7kOhm 0.1%]
+                           | 
+MCU PIN>---+---[100kOhm]---+---[THERMISTOR]---+
            |                                 |
            = [2.2uF]                         |
            |                                 |
@@ -89,7 +89,7 @@ So the voltage on the thermistor shouldn't go over 2.24V.  If shorted, the curre
 
 There are a few issues with using digipots for this.  First, the tolerance is awful, typically 20-30% and quite nonlinear.  Second, the number of taps is limited.  With 256 taps, the resistance increment would be 39 Ohm.  This is the difference between 225C and 265C.
 
-One option would be using two digipots in series to get better resolution.  If we had a 10kOhm and a 1kOhm in series.  But 1kOhm are expensive.  No good solution that I can see.
+One option would be using two digipots in series to get better resolution.  If we had a 100kOhm and a 1kOhm in series.  But 1kOhm are expensive.  No good solution that I can see.
 
 For the bed, a digipot is probably fine.
 
@@ -155,7 +155,7 @@ On the Ender3, thermistors are connected as follows:
 ```
           <5.0V>
             |
-         [10kOhm]
+        [100kOhm]
             | 
 <MCU PIN>---+---[THERMISTOR]---+
             |                  |
@@ -175,7 +175,7 @@ Let's consider the following circuit diagram:
 ```
                           +---[R1=4.7kOhm]---<VH=3.3V>
                           |
-<V1=DAC PIN>---+---[R3]---+---[R2=10kOhm]---<V2=PRINTER ADC PIN>
+<V1=DAC PIN>---+---[R3]---+---[R2=100kOhm]---<V2=PRINTER ADC PIN>
 ```
 
 We can solve this for V2(V1, VH, R1, R2, R3):
@@ -188,4 +188,19 @@ I1 + I2 + I3 = 0
 --> V2 = (R1 * V1 + R3 * VH) / (R1 + R3)
 ```
 
-The lowest this can go is with `V2(V1=0) = VH / (R1 / R3 + 1)`.  If I need to simulate a thermistor going as low as 50 Ohm, then I need the voltage to be `3.3 * 50 / (4700 + 40) = 0.035V`.  Solving `0.035V = 3.3V / (4700Ohm / R3 + 1) --> R3 = 50 Ohm`.  This should not be surprising, since at that extreme V1 acts as a ground.
+The lowest this can go is with `V2(V1=0) = VH / (R1 / R3 + 1)`.  If I need to simulate a thermistor going as low as 200 Ohm, then I need the voltage to be `3.3V * 50 / (4700 + 40) = 0.135V`.  I could use an inline resistor of at most 200 Ohm to simulate this.
+
+### Endstop simulating and detection
+
+On the Ender3, the endstop pin is tied directly to the connector, and pulled up to VCC (5V) with a 10 kOhm resistor.
+
+On the duet 2 wifi:
+
+```
+<3.3V>---[1kOhm]---[LED>|]---+
+                             |
+      <MCU PIN>---[10kOhm]---+---<ENDSTOP CONNECTOR>
+
+```
+
+In either case, we can simulate an endstop by using an open drain output and driving it to ground.  It needs to be protected from overvoltage.  A 100Ohm inline resistor would work fine, along with a diode clamp to the 3V3 rail.
