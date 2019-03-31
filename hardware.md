@@ -54,12 +54,13 @@ What is actually needed to monitor/simulate a 3d printer board?
 
 * (8 high-speed pins, 4 slower pins) Monitor X, Y, Z, and E stepper motors
   * Per motor, need STEP and DIR hooked up to timer IC inputs.  Can monitor EN with a slower GPIO pin.
-* (2 pins) X and Y end-stops
+* (1 pin) Stepper motor monitoring
+* (3 pins) X, Y, and Z end-stops
 * (2 pins) SWD interface
 * (2 pins) UART debug input/output
 * (1 pin) Error-indicating LED
 * (1 pin) monitor bed heating on/off
-* (2 pins) monitor fans?
+* (3 pins) monitor fans?
 * (2 DAC pins) simulate bed and hot end thermistors
 * (1 pin) monitor hot end heater on/off
 * (1 pin) simulate EZABL type bed leveler
@@ -71,6 +72,7 @@ The common thermistors used in 3D printers are 10kOhm at room temp and go lower 
 A 10kOhm digital potentiometer might work well.
 
 On the board (Duet 2 Wifi), thermistors are connected in the following circuit:
+
 ```
                         [3.3V]
                           |
@@ -131,3 +133,59 @@ This channel is used as a debug stream.
 
 * USART3_TX - DMA1 Stream 3
 
+### Monitoring of on/off channels
+
+There are a number of items we need to monitor for on/off.  Off, they should be pulled down to 0V.  On, they are set anywhere from 3.3V to 24V.  One option would be to use ADC channels to monitor the exact voltage for each of these channels.  If I used DMA, this works well to keep the timing between samples consistent.
+
+If I expect voltages up to around 24V, the following circuit works well:
+
+```
+
+<ADC PIN>---+---[7.5kOhm]---<PRINTER PIN>
+            |
+            +---[1.0kOhm]---<GND>
+```
+
+With a 12-bit ADC, this gives a resolution of 6.8mV and a max voltage of 28.05V.  Since this will typically be used to monitor on/off peripherals, this seems fine.
+
+### Ender3 thermistors
+
+On the Ender3, thermistors are connected as follows:
+
+```
+          <5.0V>
+            |
+         [10kOhm]
+            | 
+<MCU PIN>---+---[THERMISTOR]---+
+            |                  |
+            = [2.2uF]          |
+            |                  |
+           GND                GND
+```
+
+### Simulating thermistor channels
+
+We are using a DAC to simulate the thermistor.  I would like to protect it from being connected to 24V while still being able to simulate very high temperatures.
+
+The BAT54C has a max power dissipation of 200mW.  At 24V, this is produced with a current of 8.3mA.  An inline resistor of 2.9 kOhm would prevent more than this.  However, this would prevent me from simulating very high temperatures.  No good.
+
+Let's consider the following circuit diagram:
+
+```
+                          +---[R1=4.7kOhm]---<VH=3.3V>
+                          |
+<V1=DAC PIN>---+---[R3]---+---[R2=10kOhm]---<V2=PRINTER ADC PIN>
+```
+
+We can solve this for V2(V1, VH, R1, R2, R3):
+
+```
+I1 = (VH - V4) / R1
+I2 = (V2 - V4) / R2 = 0
+I3 = (V1 - V4) / R3
+I1 + I2 + I3 = 0
+--> V2 = (R1 * V1 + R3 * VH) / (R1 + R3)
+```
+
+The lowest this can go is with `V2(V1=0) = VH / (R1 / R3 + 1)`.  If I need to simulate a thermistor going as low as 50 Ohm, then I need the voltage to be `3.3 * 50 / (4700 + 40) = 0.035V`.  Solving `0.035V = 3.3V / (4700Ohm / R3 + 1) --> R3 = 50 Ohm`.  This should not be surprising, since at that extreme V1 acts as a ground.
