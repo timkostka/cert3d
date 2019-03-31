@@ -94,3 +94,40 @@ For the bed, a digipot is probably fine.
 I could use a DAC.  The STM32F4 has a 12-bit DAC.  This gives a resolution of 0.8 mV.  This is way better.  This may vary depending on how boards are set up, but it's doable.
 
 With 2 DACs, we can simualte 2 thermistors.
+
+### STEP/DIR channels
+
+What channels and DMA streams can we use for the STEP/DIR signal monitoring?
+
+* TIM1_CH1 - DMA2 Stream 1
+
+* TIM1_CH2 - DMA2 Stream 2
+
+* TIM1_CH3 - DMA2 Stream 6
+
+* TIM1_CH4 - DMA2 Stream 4
+
+* TIM8_CH1 - DMA2 Stream 2
+
+* TIM8_CH2 - DMA2 Stream 3
+
+* TIM8_CH3 - DMA2 Stream 4
+
+* TIM8_CH4 - DMA2 Stream 7
+
+So out of these, we can have 6 enabled.  These can monitor X, Y and E.  All channel on TIM1 and channels 2 and 4 on TIM8.
+
+We need 2 more slow speed channels to monitor Z.
+
+* TIM3_CH1 - DMA1 Stream 4
+
+* TIM3_CH2 - DMA1 Stream 5
+
+### UART debug channel
+
+This channel is used as a debug stream.
+
+* USART3_RX - DMA1 Stream 1
+
+* USART3_TX - DMA1 Stream 3
+
