@@ -102,3 +102,28 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# Eagle
+*.b#1
+*.b#2
+*.b#3
+*.b#4
+*.b#5
+*.b#6
+*.b#7
+*.b#8
+*.b#9
+*.s#1
+*.s#2
+*.s#3
+*.s#4
+*.s#5
+*.s#6
+*.s#7
+*.s#8
+*.s#9
+backup*.brd.*
+backup*.sch.*
+*_dropped.brd
+eagle.epf
+ttround.scr
