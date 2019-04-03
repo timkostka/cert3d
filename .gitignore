@@ -127,3 +127,4 @@ backup*.sch.*
 *_dropped.brd
 eagle.epf
 ttround.scr
+*/cam/*
