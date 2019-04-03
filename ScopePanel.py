@@ -55,23 +55,23 @@ class ScopePanel(wx.Panel):
         self.snap_distance = 10
         # font for labels
         self.font_label = wx.Font(
-                9,
-                wx.FONTFAMILY_MODERN,
-                wx.FONTSTYLE_NORMAL,
-                wx.FONTWEIGHT_NORMAL,
-                False,
-                "Consolas",
-            )
+            9,
+            wx.FONTFAMILY_MODERN,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_NORMAL,
+            False,
+            "Consolas",
+        )
 
         # font for timestamps
         self.font_timestamp = wx.Font(
-                7,
-                wx.FONTFAMILY_MODERN,
-                wx.FONTSTYLE_NORMAL,
-                wx.FONTWEIGHT_NORMAL,
-                False,
-                "Consolas",
-            )
+            7,
+            wx.FONTFAMILY_MODERN,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_NORMAL,
+            False,
+            "Consolas",
+        )
         # either None or (channel_number, time)
         self.snaptime_start = None
         self.snaptime_end = None
@@ -223,28 +223,28 @@ class ScopePanel(wx.Panel):
     def time_to_text(time):
         """Convert the time in seconds to a text value."""
         if time == 0:
-            return '0'
+            return "0"
         abstime = abs(time)
         if abstime < 10e-9:
-            return '%.2f ns' % (time * 1e9)
+            return "%.2f ns" % (time * 1e9)
         elif abstime < 100e-9:
-            return '%.1fns' % (time * 1e9)
+            return "%.1fns" % (time * 1e9)
         elif abstime < 1000e9:
-            return '%.0fns' % (time * 1e9)
+            return "%.0fns" % (time * 1e9)
         elif abstime < 10e6:
-            return '%.2fus' % (time * 1e9)
+            return "%.2fus" % (time * 1e9)
         elif abstime < 100e6:
-            return '%.1fus' % (time * 1e9)
+            return "%.1fus" % (time * 1e9)
         elif abstime < 1000e6:
-            return '%.0fus' % (time * 1e9)
+            return "%.0fus" % (time * 1e9)
         elif abstime < 10e3:
-            return '%.2fms' % (time * 1e9)
+            return "%.2fms" % (time * 1e9)
         elif abstime < 100e3:
-            return '%.1fms' % (time * 1e9)
+            return "%.1fms" % (time * 1e9)
         elif abstime < 1000e3:
-            return '%.0fms' % (time * 1e9)
+            return "%.0fms" % (time * 1e9)
         else:
-            return '%gs' % time
+            return "%gs" % time
 
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
