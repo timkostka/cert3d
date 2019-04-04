@@ -243,7 +243,7 @@ class ScopePanel(wx.Panel):
             # if no net motion, just return
             if not dx:
                 return
-            print('moved by %d pixels' % dx)
+            #print('moved by %d pixels' % dx)
             delta = self.seconds_per_pixel * dx
             self.start_time -= delta
             self.panning_start += dx
@@ -369,13 +369,54 @@ class ScopePanel(wx.Panel):
         else:
             return "%gs" % time
 
+    def draw_bilevel_channel(self, dc, rect, channel):
+        """Draw a channel of type BilevelData to the given rectangular region"""
+        # clip to the specified region
+        dc.SetClippingRegion(*rect)
+        data = channel.data
+        # get pixels per tick
+        pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
+        # draw x pixel of start of channel data
+        channel_left = rect[0] + (
+                    data.start_time - self.start_time) / self.seconds_per_pixel
+        # true if signal is low
+        # note we start on the opposite edge, since we flip it before drawing
+        # the first plateau
+        signal_low = data.start_high
+        # alias some things to shorter names
+        y1 = rect[1]
+        y2 = y1 + rect[3] - 1
+        height = y2 - y1 + 1
+        thickness = channel.thickness
+        left = rect[0]
+        right = rect[0] + rect[2] - 1
+        # number of ticks for current data point
+        ticks = 0
+        for i2, length in enumerate(data.data):
+            x1 = int(channel_left + ticks * pixels_per_tick + 0.5)
+            # if not the first point, draw the vertical line
+            if i2 > 0: # and left <= x1 <= right:
+                dc.DrawRectangle(x1, y1, thickness, height)
+                pass
+            # flip signal polarity
+            signal_low = not signal_low
+            ticks += length
+            x2 = int(channel_left + ticks * pixels_per_tick + 0.5)
+            # if in range, draw the edge
+            if False and (x2 < left or x1 > right):
+                pass
+            else:
+                y = y2 - thickness + 1 if signal_low else y1
+                dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
+        dc.DestroyClippingRegion()
+
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
         # dc = wx.PaintDC(self)
         dc = wx.AutoBufferedPaintDC(self)
         dc.Clear()
         # dc = wx.GCDC(dc)
-        width = 1
+        #width = 7
         # draw channel names
         dc.SetPen(wx.Pen(wx.GREEN, 1))
         dc.SetBrush(wx.GREEN_BRUSH)
@@ -396,7 +437,7 @@ class ScopePanel(wx.Panel):
                 top += self.padding
             # get top (y1) and bottom (y2) of display
             y1 = top
-            y2 = y1 + channel.height - 1 - (width - 1)
+            y2 = y1 + channel.height - 1
             y_mid = (y1 + y2) // 2
             if self.selected_channel_index == i:
                 # draw background
@@ -404,7 +445,7 @@ class ScopePanel(wx.Panel):
                 dc.SetPen(wx.Pen(color, 1))
                 dc.SetBrush(wx.Brush(color))
                 add = self.padding // 2
-                dc.DrawRectangle(0, y1 - add, right + 1, y2 - y1 + 1 + 2 * (width // 2) + add * 2)
+                dc.DrawRectangle(0, y1 - add, right + 1, y2 - y1 + 1 + add * 2)
             # set channel color
             dc.SetPen(wx.Pen(channel.color, 1))
             dc.SetBrush(wx.Brush(channel.color))
@@ -416,17 +457,27 @@ class ScopePanel(wx.Panel):
             x = self.margin + self.channel_length
             rect = self.GetFullTextExtent(name)
             dc.DrawText(name, x - rect[0], y_mid - rect[1] // 2)
+            # get rect to clip channel data to
+            rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
+            if isinstance(data, BilevelData):
+                self.draw_bilevel_channel(dc, rect, channel)
+            top += channel.height
+            continue
             # get pixels per tick
             pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
             # draw the channel
             ticks = 0
             channel_left = left + (data.start_time - self.start_time) / self.seconds_per_pixel
+            # get rect to clip channel data to
+            rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
+            print(rect)
+            dc.SetClippingRegion(*rect)
             # true if signal is low
             signal_low = not data.start_high
             for i2, length in enumerate(data.data):
                 x1 = int(channel_left + ticks * pixels_per_tick + 0.5)
                 # if not the first point, draw the vertical line
-                if i2 > 0 and left <= x1 <= right:
+                if True or i2 > 0 and left <= x1 <= right:
                     dc.DrawRectangle(x1 - width // 2, y1, width, y2 - y1 + 1)
                     pass
                 # flip signal polarity
@@ -434,14 +485,16 @@ class ScopePanel(wx.Panel):
                 ticks += length
                 x2 = int(channel_left + ticks * pixels_per_tick + 0.5)
                 # if in range, draw the edge
-                if x2 < left or x1 > right:
+                if False and (x2 < left or x1 > right):
                     pass
                 else:
                     y = y2 if signal_low else y1
                     x11 = max(x1, left)
                     x12 = min(x2, right)
                     dc.DrawRectangle(x11 - width // 2, y, x12 - x11 + 1 + 2 * (width // 2), width)
+            dc.DestroyClippingRegion()
             top += channel.height
+        return
         # draw snap time
         if self.snaptime_start:
             dc.SetPen(wx.Pen(wx.RED, 1))

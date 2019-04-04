@@ -1,30 +1,32 @@
 import random
+import math
 
 
-class BilevelData:
-    """The BilevelData class holds data about edges for a given signal."""
+class PlotData:
+    """The PlotData class holds xy plot data for a given signal."""
 
     def __init__(self):
-        # name of the channel
+        # name of the data
         self.name = "DATA"
         # number of ticks per second
         self.seconds_per_tick = 1.0 / 180e6
         # starting time in seconds
         self.start_time = 0.0
-        # if True, signal starts high
-        self.start_high = False
-        # length of each pulse in ticks
+        # xy plot data, where x is in ticks
         self.data = []
         self.invent_data()  # DEBUG
 
     def get_length(self):
         """Return the length of the data in seconds."""
-        return sum(self.data) * self.seconds_per_tick
+        if not self.data:
+            return 0
+        return self.data[-1][0]
 
     def invent_data(self):
         """Populate with randomly generated data."""
-        self.data = [random.randint(1, 10) for _ in range(100)]
         self.start_time = 0.0
+        for i in range(100):
+            self.data.append((i * 5, math.sin(i * math.tau / 99)))
 
     def get_closest_edge_time(self, target_time):
         """Return the edge time closest to the target time, or None."""

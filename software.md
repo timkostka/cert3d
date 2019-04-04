@@ -14,6 +14,8 @@ The software package part of Cert3D will be PC-based application.  It shall have
 
 * ScopePanel.py: This is a custom widget to draw oscilloscope-type information on a panel.
 
+* Channel.py: This hold information about a singl channel, either digital or analog.
+
 * BilevelData.py: This holds data on a single channel of digital data.
 
 * PlotData.py: This holds xy data on a single channel. 
@@ -30,3 +32,6 @@ Channel names should be on the left-hand side of the widget.  Each channel can h
 
 The width of the channel name display shall be fixed to the minimum possible size and recalculated when a new channel is added.
 
+### ScopeChannel.py
+
+This should hold aethestic information about the channel (color, height, scaling).  It will also do the drawing.
