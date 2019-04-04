@@ -12,11 +12,11 @@ import wx.xrc
 from ScopePanel import ScopePanel
 
 ###########################################################################
-## Class ScopeResultsWindow
+## Class AnalysisWindowBase
 ###########################################################################
 
 
-class ScopeResultsWindow(wx.Frame):
+class AnalysisWindowBase(wx.Frame):
     def __init__(self, parent):
         wx.Frame.__init__(
             self,
@@ -39,7 +39,7 @@ class ScopeResultsWindow(wx.Frame):
 
         bSizer51 = wx.BoxSizer(wx.VERTICAL)
 
-        self.m_panel1 = ScopePanel(
+        self.scope_panel = ScopePanel(
             self,
             wx.ID_ANY,
             wx.DefaultPosition,
@@ -47,7 +47,7 @@ class ScopeResultsWindow(wx.Frame):
             wx.TAB_TRAVERSAL,
         )
 
-        bSizer51.Add(self.m_panel1, 1, wx.ALL | wx.EXPAND, 5)
+        bSizer51.Add(self.scope_panel, 1, wx.ALL | wx.EXPAND, 5)
 
         self.m_scrollBar1 = wx.ScrollBar(
             self,
@@ -80,12 +80,12 @@ class ScopeResultsWindow(wx.Frame):
         self.Centre(wx.BOTH)
 
         # Connect Events
-        self.m_panel1.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
+        #self.scope_panel.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
     def __del__(self):
         pass
 
         # Virtual event handlers, overide them in your derived class
 
-    def event_mouse_wheel(self, event):
-        event.Skip()
+    #def event_mouse_wheel(self, event):
+    #    event.Skip()

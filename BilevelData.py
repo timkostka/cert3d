@@ -1,8 +1,8 @@
 import random
 
 
-class ScopeData:
-    """The ScopeData class holds data about edges for a given signal."""
+class BilevelData:
+    """The BilevelData class holds data about edges for a given signal."""
 
     def __init__(self):
         # name of the channel
@@ -11,6 +11,8 @@ class ScopeData:
         self.seconds_per_tick = 1.0 / 180e6
         # starting time in seconds
         self.start_time = 0.0
+        # if True, signal starts high
+        self.start_high = False
         # length of each pulse in ticks, starting with low pulse
         self.data = []
         self.invent_data()  # DEBUG

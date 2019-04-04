@@ -1,43 +1,90 @@
 """
-This implements a custom wx control.
+This implements a custom wx control to view .
 
 """
 
 import wx
 
-from ScopeData import ScopeData
+from BilevelData import BilevelData
+
+
+def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
+    """Given the STEP and DIR channels, return position."""
+    time = step_channel.start_time == dir_channel.start_time
+    dir_is_up = dir_channel.start_high
+    # get microstep vs time
+    data = []
+    data.append((0, 0))
+    steps = 0
+    # loop through until we reach the end of either stream
+    try:
+        dir_it = iter(dir_channel.data)
+        dir_is_low = not dir_channel.start_high
+        remaining_dir_ticks = next(dir_it)
+        assert step_channel.start_high == False
+        step_is_low = not step_channel.start_high
+        ticks = 0
+        for pulse in step_channel.data:
+            ticks += pulse
+            step_is_low = not step_is_low
+            remaining_dir_ticks -= pulse
+            while remaining_dir_ticks < 0:
+                dir_is_low = not dir_is_low
+                remaining_dir_ticks += next(dir_it)
+            # if we transitioned high, increase or decrease step
+            if dir_is_low:
+                steps -= 1
+            else:
+                steps += 1
+            data.append((ticks, steps))
+    except StopIteration:
+        pass
+    return data
 
 
 class ScopePanel(wx.Panel):
-    def __init__(self, parent, id, position, size, style):
+
+    def __init__(self, parent, id_, position, size, style):
         print("Initializing!")
-        super().__init__(parent, id, position, size, style)
+        super().__init__(parent, id_, position, size, style)
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         self.SetFont(
             wx.Font(
-                9,
+                12,
                 wx.FONTFAMILY_MODERN,
                 wx.FONTSTYLE_NORMAL,
-                wx.FONTWEIGHT_NORMAL,
+                wx.FONTWEIGHT_BOLD,
                 False,
                 "Consolas",
             )
         )
+        # list of channels
+        self.channels = []
+        # index of selected channel, or None
+        self.selected_channel_index = None
+        # margin on all sides of display
+
+        # padding between channels
+        self.padding = 11
+        # padding between name and channel data
+        self.padding2 = 5
+        # thickness in pixels of channel separator bar
+        self.channel_separator_thickness = 3
+        # margin in pixels all around
+        self.margin = 5
+
         ## number of channel
         # self.channel_count = 4
         # data for each channel
-        self.channels = [ScopeData() for _ in range(4)]
-        for i, channel in enumerate(self.channels):
-            channel.name = "DATA%d" % i
-        self.channels[0].name = "X_STEP"
+        #self.channels = [BilevelData() for _ in range(4)]
+        #for i, channel in enumerate(self.channels):
+        #    channel.name = "DATA%d" % i
+        #data = decode_stepper(self.channels[0], self.channels[1])
+        #print(data)
+        #self.channels[0].name = "X_STEP"
+
         # height of each channel in pixels
         self.channel_height = 30
-        # margin in pixels all around
-        self.margin = 5
-        # padding between channels
-        self.padding = 10
-        # padding between name and channel data
-        self.padding2 = 5
         # padding around timestamp label
         self.padding_timestamp_label = 2
         # length of channel
@@ -91,7 +138,11 @@ class ScopePanel(wx.Panel):
 
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
-        self.initialize_viewing_window()
+        self.zoom_to_all()
+
+    def add_channel(self, channel):
+        """Add a new channel."""
+        self.channels.append(channel)
 
     def find_snaptime(self, position):
         """Return the snaptime at the given position, or None"""
@@ -189,19 +240,20 @@ class ScopePanel(wx.Panel):
         x -= self.margin + self.channel_length + self.padding2
         return self.start_time + x * self.seconds_per_pixel
 
-    def get_channel_y_values(self, channel_number):
-        """Return the top and bottom y values for the given channel."""
-        y1 = self.margin + channel_number * (
-            self.padding + self.channel_height
-        )
-        return y1, y1 + self.channel_height - 1
+    def get_channel_y_values(self, channel_index):
+        """Return the top and bottom y pixels for the given channel."""
+        top = self.margin
+        top += sum(x.height for x in self.channels[:channel_index])
+        top += channel_index * self.padding
+        return top, top + self.channels[channel_index].height - 1
 
-    def initialize_viewing_window(self):
+    def zoom_to_all(self):
         """Initialize the viewing window to see all data."""
         if not self.channels:
             return
-        left = min(x.start_time for x in self.channels)
-        right = max(x.start_time + x.get_length() for x in self.channels)
+        left = min(x.data.start_time for x in self.channels)
+        right = max(x.data.start_time + x.data.get_length()
+                    for x in self.channels)
         self.start_time = left
         self.seconds_per_pixel = 1.0
         if right != left:
@@ -257,57 +309,67 @@ class ScopePanel(wx.Panel):
         dc.SetPen(wx.Pen(wx.GREEN, 1))
         dc.SetBrush(wx.GREEN_BRUSH)
         # get leftmost pixel we can draw for scope view
-        left = self.margin + self.channel_length + self.padding
+        left = self.margin + self.channel_length + self.padding2
         # get rightmost pixel to draw for scope view
         right = self.GetSize()[0] - 1
+        # get top pixel for next channel
+        top = 0
         for i, channel in enumerate(self.channels):
+            # draw the separator
+            if i == 0:
+                top += self.margin
+            else:
+                y0 = top + self.padding // 2
+                dc.SetPen(wx.Pen(wx.LIGHT_GREY, 1))
+                dc.DrawRectangle(0, y0, right + 1, 1)
+                top += self.padding
+            # get top (y1) and bottom (y2) of display
+            y1 = top
+            y2 = y1 + channel.height - 1 - (width - 1)
+            y_mid = (y1 + y2) // 2
+            if self.selected_channel_index == i:
+                # draw background
+                color = wx.Colour(63, 63, 63)
+                dc.SetPen(wx.Pen(color, 1))
+                dc.SetBrush(wx.Brush(color))
+                add = self.padding // 2
+                dc.DrawRectangle(0, y1 - add, right + 1, y2 - y1 + 1 + 2 * (width // 2) + add * 2)
+            # set channel color
+            dc.SetPen(wx.Pen(channel.color, 1))
+            dc.SetBrush(wx.Brush(channel.color))
+            # if not the first channel, draw the separator
+            dc.SetTextForeground(channel.color)
+            data = channel.data
+            name = data.name
             # get x,y of middle center
             x = self.margin + self.channel_length
-            y = (
-                self.margin
-                + i * (self.channel_height + self.padding)
-                + self.channel_height // 2
-            )
-            rect = self.GetFullTextExtent(channel.name)
-            dc.DrawText(channel.name, x - rect[0], y - rect[1] // 2)
-            # get top (y1) and bottom (y2) of channel display
-            y1 = self.margin + i * (self.channel_height + self.padding)
-            y2 = y1 + self.channel_height - width + 1
+            rect = self.GetFullTextExtent(name)
+            dc.DrawText(name, x - rect[0], y_mid - rect[1] // 2)
             # get pixels per tick
-            pixels_per_tick = channel.seconds_per_tick / self.seconds_per_pixel
-            # get x of start of the time
-            x = self.margin + self.channel_length + self.padding2
-            x -= (
-                self.start_time - channel.start_time
-            ) / self.seconds_per_pixel
+            pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
             # draw the channel
             ticks = 0
-            x1 = x
-            first_point = True
-            for length in channel.data:
-                y1, y2 = y2, y1
-                # draw vertical line
-                if not first_point:
-                    self.draw_clipped_rectangle(
-                        dc,
-                        x1,
-                        min(y1, y2),
-                        width,
-                        max(y1, y2) - min(y1, y2) + 1,
-                        left,
-                        right,
-                    )
-                first_point = False
-                # dc.DrawRectangle(x1, min(y1, y2), width, max(y1, y2) - min(y1, y2) + 1)
-                # dc.DrawLine(x1, y1, x1, y2)
+            # true if signal is low
+            signal_low = not data.start_high
+            for i2, length in enumerate(data.data):
+                x1 = int(left + ticks * pixels_per_tick + 0.5)
+                # if not the first point, draw the vertical line
+                if i2 > 0 and left <= x1 <= right:
+                    dc.DrawRectangle(x1 - width // 2, y1, width, y2 - y1 + 1)
+                    pass
+                # flip signal polarity
+                signal_low = not signal_low
                 ticks += length
-                x2 = x + ticks * pixels_per_tick
-                self.draw_clipped_rectangle(
-                    dc, x1, y1, x2 - x1 + width, width, left, right
-                )
-                # dc.DrawRectangle(x1, y1, x2 - x1 + width, width)
-                # dc.DrawLine(x1, y1, x2, y1)
-                x1 = x2
+                x2 = int(left + ticks * pixels_per_tick + 0.5)
+                # if in range, draw the edge
+                if x2 < left or x1 > right:
+                    pass
+                else:
+                    y = y2 if signal_low else y1
+                    x11 = max(x1, left)
+                    x12 = min(x2, right)
+                    dc.DrawRectangle(x11 - width // 2, y, x12 - x11 + 1 + 2 * (width // 2), width)
+            top += channel.height
         # draw snap time
         if self.snaptime_start:
             dc.SetPen(wx.Pen(wx.RED, 1))

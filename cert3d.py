@@ -7,11 +7,14 @@ import wx
 import platform
 import ctypes
 
-# from ScopeData import ScopeData
+# from BilevelData import BilevelData
 # from ScopePanel import ScopePanel
-from ScopeResultsWindow import ScopeResultsWindow
+from BilevelData import BilevelData
+from AnalysisWindow import AnalysisWindow
 
 system_dpi = 96
+
+
 
 
 def get_system_dpi():
@@ -50,7 +53,7 @@ def run_gui():
     get_system_dpi()
     # create the window
     app = wx.App()
-    ex = ScopeResultsWindow(None)
+    ex = AnalysisWindow(None)
     ex.Show()
     app.MainLoop()
 
