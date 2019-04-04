@@ -72,7 +72,6 @@ class ScopePanel(wx.Panel):
         self.channel_separator_thickness = 3
         # margin in pixels all around
         self.margin = 5
-
         ## number of channel
         # self.channel_count = 4
         # data for each channel
@@ -136,6 +135,9 @@ class ScopePanel(wx.Panel):
         self.Bind(wx.EVT_RIGHT_UP, self.event_mouse_right_button_up)
         self.Bind(wx.EVT_MOTION, self.event_mouse_motion)
 
+        #self.Bind(wx.EVT_ENTER_WINDOW, self.asdf)
+        self.Bind(wx.EVT_LEAVE_WINDOW, self.event_leave_window)
+
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
         self.zoom_to_all()
@@ -195,16 +197,34 @@ class ScopePanel(wx.Panel):
         """Return the time at the mouse coordinates."""
         pass
 
+    def event_leave_window(self, event):
+        if self.panning:
+            self.event_mouse_right_button_up(event)
+            #self.SetCursor(wx.StockCursor(wx.CURSOR_DEFAULT))
+            #self.panning = False
+
     def event_mouse_right_button_down(self, event):
-        self.panning = True
-        self.panning_start = event.GetPosition()[0]
+        #print('right button down')
+        x = event.GetPosition()[0]
+        if x >= self.margin + self.channel_length + self.padding2:
+            self.panning_start = x
+            self.panning = True
+            self.SetCursor(wx.Cursor(wx.CURSOR_SIZEWE))
 
     def event_mouse_right_button_up(self, event):
-        self.panning = False
+        #print('right button up')
+        if self.panning:
+            self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
+            self.panning = False
 
     def event_mouse_motion(self, event):
+        #print('mouse motion')
         if self.panning:
             dx = event.GetPosition()[0] - self.panning_start
+            # if no net motion, just return
+            if not dx:
+                return
+            print('moved by %d pixels' % dx)
             delta = self.seconds_per_pixel * dx
             self.start_time -= delta
             self.panning_start += dx
@@ -349,10 +369,11 @@ class ScopePanel(wx.Panel):
             pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
             # draw the channel
             ticks = 0
+            channel_left = left + (data.start_time - self.start_time) / self.seconds_per_pixel
             # true if signal is low
             signal_low = not data.start_high
             for i2, length in enumerate(data.data):
-                x1 = int(left + ticks * pixels_per_tick + 0.5)
+                x1 = int(channel_left + ticks * pixels_per_tick + 0.5)
                 # if not the first point, draw the vertical line
                 if i2 > 0 and left <= x1 <= right:
                     dc.DrawRectangle(x1 - width // 2, y1, width, y2 - y1 + 1)
@@ -360,7 +381,7 @@ class ScopePanel(wx.Panel):
                 # flip signal polarity
                 signal_low = not signal_low
                 ticks += length
-                x2 = int(left + ticks * pixels_per_tick + 0.5)
+                x2 = int(channel_left + ticks * pixels_per_tick + 0.5)
                 # if in range, draw the edge
                 if x2 < left or x1 > right:
                     pass
