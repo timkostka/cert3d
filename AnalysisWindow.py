@@ -23,6 +23,5 @@ class AnalysisWindow(AnalysisWindowBase):
             channel.data.start_high = random.choice([True, False])
             self.scope_panel.add_channel(channel)
 
-        self.scope_panel.selected_channel_index = 0
         # zoom to all
         self.scope_panel.zoom_to_all()

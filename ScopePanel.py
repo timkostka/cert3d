@@ -64,6 +64,9 @@ class ScopePanel(wx.Panel):
         self.selected_channel_index = None
         # margin on all sides of display
 
+        # (channel_index, y_value) used during rearranging channels
+        self.dragging_channel = None
+
         # padding between channels
         self.padding = 11
         # padding between name and channel data
@@ -173,25 +176,41 @@ class ScopePanel(wx.Panel):
         return None
 
     def event_mouse_left_button_down(self, event):
-        # find closest
-        old_start = self.snaptime_start
-        old_end = self.snaptime_end
-        self.snaptime_start = None
-        self.snaptime_end = None
-        self.snaptime_start = self.find_snaptime(event.GetPosition())
-        if self.snaptime_start != old_start or self.snaptime_end != old_end:
-            self.Refresh()
-        self.selecting_time = bool(self.snaptime_start)
-
-    def event_mouse_left_button_up(self, event):
-        self.selecting_time = False
-        if not self.snaptime_start:
-            return
-        self.snaptime_end = self.find_snaptime(event.GetPosition())
-        if not self.snaptime_end or self.snaptime_end == self.snaptime_start:
+        # we either try to drag a channel, or try to select a snapline
+        x_separator = self.margin + self.channel_length + self.padding2
+        if event.GetPosition()[0] < x_separator:
+            y = event.GetPosition()[1]
+            for i in range(len(self.channels)):
+                y1, y2 = self.get_channel_y_values(i)
+                if y1 <= y <= y2:
+                    # print('Dragging channel', self.dragging_channel)
+                    self.dragging_channel = (i, y - y1)
+                    self.selected_channel_index = i
+                    self.Refresh()
+                    break
+        else:
+            # find closest
+            old_start = self.snaptime_start
+            old_end = self.snaptime_end
             self.snaptime_start = None
             self.snaptime_end = None
-        self.Refresh()
+            self.snaptime_start = self.find_snaptime(event.GetPosition())
+            if self.snaptime_start != old_start or self.snaptime_end != old_end:
+                self.Refresh()
+            self.selecting_time = bool(self.snaptime_start)
+
+    def event_mouse_left_button_up(self, event):
+        if self.dragging_channel:
+            self.dragging_channel = None
+            self.selected_channel_index = None
+            self.Refresh()
+        self.selecting_time = False
+        if self.snaptime_start:
+            self.snaptime_end = self.find_snaptime(event.GetPosition())
+            if not self.snaptime_end or self.snaptime_end == self.snaptime_start:
+                self.snaptime_start = None
+                self.snaptime_end = None
+            self.Refresh()
 
     def get_time_at_mouse(self, event):
         """Return the time at the mouse coordinates."""
@@ -200,8 +219,8 @@ class ScopePanel(wx.Panel):
     def event_leave_window(self, event):
         if self.panning:
             self.event_mouse_right_button_up(event)
-            #self.SetCursor(wx.StockCursor(wx.CURSOR_DEFAULT))
-            #self.panning = False
+        if self.dragging_channel:
+            self.event_mouse_left_button_up(event)
 
     def event_mouse_right_button_down(self, event):
         #print('right button down')
@@ -229,6 +248,38 @@ class ScopePanel(wx.Panel):
             self.start_time -= delta
             self.panning_start += dx
             self.Refresh()
+        elif self.dragging_channel:
+            # get offset into current channel as-is
+            index, offset = self.dragging_channel
+            y1, _ = self.get_channel_y_values(index)
+            this_offset = event.GetPosition()[1] - y1
+            # get target amount of pixels to move channel
+            current_delta = this_offset - offset
+            chan = self.channels
+            if current_delta > 0 and index < len(self.channels) - 1:
+                # set a 2 pixel hysteresis
+                current_delta -= 1
+                # get delta if we move channel down
+                increase = self.channels[index + 1].height + self.padding
+                # see if it's advantageous to move it
+                if abs(current_delta - increase) < abs(current_delta):
+                    chan[index], chan[index + 1] = chan[index + 1], chan[index]
+                    index += 1
+                    self.dragging_channel = (index, offset)
+                    self.selected_channel_index = index
+                    self.Refresh()
+            elif current_delta < 0 and index > 0:
+                # set a 2 pixel hysteresis
+                current_delta += 1
+                # get delta if we move channel up
+                increase = self.channels[index - 1].height + self.padding
+                # see if it's advantageous to move it
+                if abs(current_delta + increase) < abs(current_delta):
+                    chan[index - 1], chan[index] = chan[index], chan[index - 1]
+                    index -= 1
+                    self.dragging_channel = (index, offset)
+                    self.selected_channel_index = index
+                    self.Refresh()
         if self.snaptime_start and self.selecting_time:
             new_end = self.find_snaptime(event.GetPosition())
             if new_end != self.snaptime_end:
