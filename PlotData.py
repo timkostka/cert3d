@@ -20,7 +20,7 @@ class PlotData:
         """Return the length of the data in seconds."""
         if not self.data:
             return 0
-        return self.data[-1][0]
+        return self.data[-1][0] * self.seconds_per_tick
 
     def invent_data(self):
         """Populate with randomly generated data."""

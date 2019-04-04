@@ -26,13 +26,13 @@ class AnalysisWindow(AnalysisWindowBase):
             channel.thickness = random.randint(1, 4)
             channel.data.start_high = random.choice([True, False])
             self.scope_panel.add_channel(channel)
-        for name in ['X_POS', 'Y_POS', 'Z_POS']:
-            break
+        for name in ['X_POS', 'Y_POS', 'Z_POS', 'E_POS']:
             data = PlotData()
             channel = ScopeChannel(data)
             channel.data.name = name
             channel.height = random.randint(90, 120)
             channel.color = random.choice(all_colors)
+            channel.thickness = random.randint(1, 4)
             self.scope_panel.add_channel(channel)
         # zoom to all
         self.scope_panel.zoom_to_all()

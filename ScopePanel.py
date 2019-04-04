@@ -3,9 +3,12 @@ This implements a custom wx control to view .
 
 """
 
+import time
+
 import wx
 
 from BilevelData import BilevelData
+from PlotData import PlotData
 
 
 def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
@@ -328,7 +331,13 @@ class ScopePanel(wx.Panel):
         self.start_time = left
         self.seconds_per_pixel = 1.0
         if right != left:
-            self.seconds_per_pixel = (right - left) / 1200
+            self.seconds_per_pixel = (right - left) / self.GetSize()[0]
+        # zoom channels
+        for channel in self.channels:
+            data = channel.data
+            if isinstance(data, PlotData) and data.data:
+                channel.low_value = min(x[1] for x in data.data)
+                channel.high_value = max(x[1] for x in data.data)
 
     @staticmethod
     def draw_clipped_rectangle(dc, x, y, w, h, x1, x2):
@@ -369,7 +378,7 @@ class ScopePanel(wx.Panel):
         else:
             return "%gs" % time
 
-    def draw_bilevel_channel(self, dc, rect, channel):
+    def draw_bileveldata_channel(self, dc, rect, channel):
         """Draw a channel of type BilevelData to the given rectangular region"""
         # clip to the specified region
         dc.SetClippingRegion(*rect)
@@ -410,23 +419,59 @@ class ScopePanel(wx.Panel):
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
 
+    def draw_plotdata_channel(self, dc, rect, channel):
+        """
+        Draw a channel of type PlotData to the given rectangular region.
+
+        bottom_value is the y value of a point on the bottom of the rect.
+        top_value is the y value of a point on the top of the rect.
+
+        """
+        # clip to the specified region
+        dc.SetClippingRegion(*rect)
+        data = channel.data
+        # get pixels per tick (x scaling)
+        pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
+        # x pixel of start of channel data
+        channel_left = rect[0] + (
+                    data.start_time - self.start_time) / self.seconds_per_pixel
+        # alias some things to shorter names
+        bottom_value = channel.low_value
+        top_value = channel.high_value
+        y1 = rect[1]
+        y2 = y1 + rect[3] - 1
+        # get pixels per value (y scaling)
+        pixels_per_value = (y2 - y1 - 2 * (channel.thickness // 2)) / (bottom_value - top_value)
+        top_value -= (channel.thickness // 2) / pixels_per_value
+        # set the drawing pen
+        dc.SetPen(wx.Pen(channel.color, channel.thickness))
+        x1 = None
+        y1 = None
+        for point in data.data[1:]:
+            x2, y2 = x1, y1
+            x1 = int(channel_left + point[0] * pixels_per_tick + 0.5)
+            y1 = int(rect[1] + (point[1] - top_value) * pixels_per_value + 0.5)
+            if x2 is not None:
+                dc.DrawLine(x1, y1, x2, y2)
+        dc.DestroyClippingRegion()
+
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
         # dc = wx.PaintDC(self)
         dc = wx.AutoBufferedPaintDC(self)
         dc.Clear()
-        # dc = wx.GCDC(dc)
-        #width = 7
         # draw channel names
-        dc.SetPen(wx.Pen(wx.GREEN, 1))
-        dc.SetBrush(wx.GREEN_BRUSH)
+        #dc.SetPen(wx.Pen(wx.GREEN, 1))
+        #dc.SetBrush(wx.GREEN_BRUSH)
         # get leftmost pixel we can draw for scope view
         left = self.margin + self.channel_length + self.padding2
         # get rightmost pixel to draw for scope view
         right = self.GetSize()[0] - 1
         # get top pixel for next channel
         top = 0
+        timings = []
         for i, channel in enumerate(self.channels):
+            timings.append(time.perf_counter())
             # draw the separator
             if i == 0:
                 top += self.margin
@@ -460,40 +505,15 @@ class ScopePanel(wx.Panel):
             # get rect to clip channel data to
             rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
             if isinstance(data, BilevelData):
-                self.draw_bilevel_channel(dc, rect, channel)
+                self.draw_bileveldata_channel(dc, rect, channel)
+            elif isinstance(data, PlotData):
+                self.draw_plotdata_channel(dc, rect, channel)
+            else:
+                print('ERROR: unknown data type')
             top += channel.height
-            continue
-            # get pixels per tick
-            pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
-            # draw the channel
-            ticks = 0
-            channel_left = left + (data.start_time - self.start_time) / self.seconds_per_pixel
-            # get rect to clip channel data to
-            rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
-            print(rect)
-            dc.SetClippingRegion(*rect)
-            # true if signal is low
-            signal_low = not data.start_high
-            for i2, length in enumerate(data.data):
-                x1 = int(channel_left + ticks * pixels_per_tick + 0.5)
-                # if not the first point, draw the vertical line
-                if True or i2 > 0 and left <= x1 <= right:
-                    dc.DrawRectangle(x1 - width // 2, y1, width, y2 - y1 + 1)
-                    pass
-                # flip signal polarity
-                signal_low = not signal_low
-                ticks += length
-                x2 = int(channel_left + ticks * pixels_per_tick + 0.5)
-                # if in range, draw the edge
-                if False and (x2 < left or x1 > right):
-                    pass
-                else:
-                    y = y2 if signal_low else y1
-                    x11 = max(x1, left)
-                    x12 = min(x2, right)
-                    dc.DrawRectangle(x11 - width // 2, y, x12 - x11 + 1 + 2 * (width // 2), width)
-            dc.DestroyClippingRegion()
-            top += channel.height
+        timings.append(time.perf_counter())
+        # output timing information
+        print('Timings: %s' % '/'.join('%g' % x for x in [(timings[i + 1] - timings[i]) for i in range(len(self.channels))]))
         return
         # draw snap time
         if self.snaptime_start:
