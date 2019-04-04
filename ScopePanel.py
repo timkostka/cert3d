@@ -71,7 +71,7 @@ class ScopePanel(wx.Panel):
         self.dragging_channel = None
 
         # padding between channels
-        self.padding = 11
+        self.padding = 9
         # padding between name and channel data
         self.padding2 = 5
         # thickness in pixels of channel separator bar
@@ -403,18 +403,22 @@ class ScopePanel(wx.Panel):
         ticks = 0
         for i2, length in enumerate(data.data):
             x1 = int(channel_left + ticks * pixels_per_tick + 0.5)
+            # if we're past the viewing window, we're done
+            if x1 > right:
+                break
             # if not the first point, draw the vertical line
-            if i2 > 0: # and left <= x1 <= right:
+            #if i2 > 0: # and left <= x1 <= right:
+            if i2 > 0 and left <= x1 <= right:
                 dc.DrawRectangle(x1, y1, thickness, height)
-                pass
             # flip signal polarity
             signal_low = not signal_low
             ticks += length
             x2 = int(channel_left + ticks * pixels_per_tick + 0.5)
             # if in range, draw the edge
-            if False and (x2 < left or x1 > right):
-                pass
-            else:
+            #if False and (x2 < left or x1 > right):
+            #    pass
+            #else:
+            if x1 <= right and x2 >= left:
                 y = y2 - thickness + 1 if signal_low else y1
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
@@ -440,6 +444,8 @@ class ScopePanel(wx.Panel):
         top_value = channel.high_value
         y1 = rect[1]
         y2 = y1 + rect[3] - 1
+        left = rect[0]
+        right = rect[0] + rect[2] - 1
         # get pixels per value (y scaling)
         pixels_per_value = (y2 - y1 - 2 * (channel.thickness // 2)) / (bottom_value - top_value)
         top_value -= (channel.thickness // 2) / pixels_per_value
@@ -452,6 +458,7 @@ class ScopePanel(wx.Panel):
             x1 = int(channel_left + point[0] * pixels_per_tick + 0.5)
             y1 = int(rect[1] + (point[1] - top_value) * pixels_per_value + 0.5)
             if x2 is not None:
+                #if x1 <= right and x2 >= left:
                 dc.DrawLine(x1, y1, x2, y2)
         dc.DestroyClippingRegion()
 
@@ -513,7 +520,7 @@ class ScopePanel(wx.Panel):
             top += channel.height
         timings.append(time.perf_counter())
         # output timing information
-        print('Timings: %s' % '/'.join('%g' % x for x in [(timings[i + 1] - timings[i]) for i in range(len(self.channels))]))
+        print('Timings: %s' % '/'.join('%.3g' % (1000 * x) for x in [(timings[i + 1] - timings[i]) for i in range(len(self.channels))]))
         return
         # draw snap time
         if self.snaptime_start:
