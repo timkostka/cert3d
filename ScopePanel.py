@@ -53,7 +53,7 @@ class ScopePanel(wx.Panel):
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         self.SetFont(
             wx.Font(
-                12,
+                9,
                 wx.FONTFAMILY_MODERN,
                 wx.FONTSTYLE_NORMAL,
                 wx.FONTWEIGHT_BOLD,
@@ -325,19 +325,29 @@ class ScopePanel(wx.Panel):
         """Initialize the viewing window to see all data."""
         if not self.channels:
             return
-        left = min(x.data.start_time for x in self.channels)
-        right = max(x.data.start_time + x.data.get_length()
-                    for x in self.channels)
+        start_times = []
+        end_times = []
+        for channel in self.channels:
+            for signal in channel.signals:
+                start_times.append(signal.data.start_time)
+                end_times.append(signal.data.start_time + signal.data.get_length())
+        left = min(start_times) if start_times else 0.0
+        right = max(end_times) if end_times else 0.0
         self.start_time = left
         self.seconds_per_pixel = 1.0
         if right != left:
             self.seconds_per_pixel = (right - left) / self.GetSize()[0]
         # zoom channels
         for channel in self.channels:
-            data = channel.data
-            if isinstance(data, PlotData) and data.data:
-                channel.low_value = min(x[1] for x in data.data)
-                channel.high_value = max(x[1] for x in data.data)
+            low_values = []
+            high_values = []
+            for signal in channel.signals:
+                if isinstance(signal.data, PlotData) and signal.data.data:
+                    low_values.append(min(x[1] for x in signal.data.data))
+                    high_values.append(max(x[1] for x in signal.data.data))
+            if low_values:
+                channel.low_value = min(low_values)
+                channel.high_value = max(high_values)
 
     @staticmethod
     def draw_clipped_rectangle(dc, x, y, w, h, x1, x2):
@@ -378,16 +388,17 @@ class ScopePanel(wx.Panel):
         else:
             return "%gs" % time
 
-    def draw_bileveldata_channel(self, dc, rect, channel):
+    def draw_bileveldata_channel(self, dc, rect, channel, signal):
         """Draw a channel of type BilevelData to the given rectangular region"""
         # clip to the specified region
         dc.SetClippingRegion(*rect)
-        data = channel.data
+        # alias the underlying data type
+        data = signal.data
         # get pixels per tick
         pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
         # draw x pixel of start of channel data
         channel_left = rect[0] + (
-                    data.start_time - self.start_time) / self.seconds_per_pixel
+            data.start_time - self.start_time) / self.seconds_per_pixel
         # true if signal is low
         # note we start on the opposite edge, since we flip it before drawing
         # the first plateau
@@ -396,7 +407,7 @@ class ScopePanel(wx.Panel):
         y1 = rect[1]
         y2 = y1 + rect[3] - 1
         height = y2 - y1 + 1
-        thickness = channel.thickness
+        thickness = signal.thickness
         left = rect[0]
         right = rect[0] + rect[2] - 1
         # number of ticks for current data point
@@ -423,7 +434,7 @@ class ScopePanel(wx.Panel):
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
 
-    def draw_plotdata_channel(self, dc, rect, channel):
+    def draw_plotdata_channel(self, dc, rect, channel, signal):
         """
         Draw a channel of type PlotData to the given rectangular region.
 
@@ -431,9 +442,10 @@ class ScopePanel(wx.Panel):
         top_value is the y value of a point on the top of the rect.
 
         """
+        # alias the data
+        data = signal.data
         # clip to the specified region
         dc.SetClippingRegion(*rect)
-        data = channel.data
         # get pixels per tick (x scaling)
         pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
         # x pixel of start of channel data
@@ -447,25 +459,28 @@ class ScopePanel(wx.Panel):
         left = rect[0]
         right = rect[0] + rect[2] - 1
         # get pixels per value (y scaling)
-        pixels_per_value = (y2 - y1 - 2 * (channel.thickness // 2)) / (bottom_value - top_value)
-        top_value -= (channel.thickness // 2) / pixels_per_value
+        pixels_per_value = (y2 - y1 - 2 * (signal.thickness // 2)) / (bottom_value - top_value)
+        top_value -= (signal.thickness // 2) / pixels_per_value
         # set the drawing pen
-        dc.SetPen(wx.Pen(channel.color, channel.thickness))
+        dc.SetPen(wx.Pen(signal.color, signal.thickness))
         x1 = None
         y1 = None
-        for point in data.data[1:]:
+        for point in data.data:
             x2, y2 = x1, y1
             x1 = int(channel_left + point[0] * pixels_per_tick + 0.5)
             y1 = int(rect[1] + (point[1] - top_value) * pixels_per_value + 0.5)
-            if x2 is not None:
+            if x2 is not None and x1 <= right and x2 >= left:
+            #if x2 is not None:
                 #if x1 <= right and x2 >= left:
                 dc.DrawLine(x1, y1, x2, y2)
         dc.DestroyClippingRegion()
 
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
-        # dc = wx.PaintDC(self)
+        #dc = wx.PaintDC(self)
         dc = wx.AutoBufferedPaintDC(self)
+        #dc = wx.GCDC(dc)
+        dc.SetBackground(wx.BLACK_BRUSH)
         dc.Clear()
         # draw channel names
         #dc.SetPen(wx.Pen(wx.GREEN, 1))
@@ -479,7 +494,7 @@ class ScopePanel(wx.Panel):
         timings = []
         for i, channel in enumerate(self.channels):
             timings.append(time.perf_counter())
-            # draw the separator
+            # if not the first channel, draw the separator
             if i == 0:
                 top += self.margin
             else:
@@ -491,6 +506,7 @@ class ScopePanel(wx.Panel):
             y1 = top
             y2 = y1 + channel.height - 1
             y_mid = (y1 + y2) // 2
+            # highlight channel if it's selected
             if self.selected_channel_index == i:
                 # draw background
                 color = wx.Colour(63, 63, 63)
@@ -498,25 +514,31 @@ class ScopePanel(wx.Panel):
                 dc.SetBrush(wx.Brush(color))
                 add = self.padding // 2
                 dc.DrawRectangle(0, y1 - add, right + 1, y2 - y1 + 1 + add * 2)
-            # set channel color
-            dc.SetPen(wx.Pen(channel.color, 1))
-            dc.SetBrush(wx.Brush(channel.color))
-            # if not the first channel, draw the separator
-            dc.SetTextForeground(channel.color)
-            data = channel.data
-            name = data.name
-            # get x,y of middle center
-            x = self.margin + self.channel_length
-            rect = self.GetFullTextExtent(name)
-            dc.DrawText(name, x - rect[0], y_mid - rect[1] // 2)
-            # get rect to clip channel data to
-            rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
-            if isinstance(data, BilevelData):
-                self.draw_bileveldata_channel(dc, rect, channel)
-            elif isinstance(data, PlotData):
-                self.draw_plotdata_channel(dc, rect, channel)
-            else:
-                print('ERROR: unknown data type')
+            # draw channel names
+            signal_count = len(channel.signals)
+            for signal_index, signal in enumerate(channel.signals):
+                # set channel color
+                dc.SetPen(wx.Pen(signal.color, 1))
+                dc.SetBrush(wx.Brush(signal.color))
+                dc.SetTextForeground(signal.color)
+                data = signal.data
+                name = signal.name
+                # get x,y of middle center
+                rect = self.GetFullTextExtent(name)
+                x = self.margin + self.channel_length
+                # adjust for multiple signals per channel
+                y = y_mid - rect[1] // 2
+                y -= (signal_count - 1) * ((rect[1] + 5) // 2)
+                y += signal_index * (rect[1] + 5)
+                dc.DrawText(name, x - rect[0], y)
+                # get rect to clip channel data to
+                rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
+                if isinstance(signal.data, BilevelData):
+                    self.draw_bileveldata_channel(dc, rect, channel, signal)
+                elif isinstance(signal.data, PlotData):
+                    self.draw_plotdata_channel(dc, rect, channel, signal)
+                else:
+                    print('ERROR: unknown data type')
             top += channel.height
         timings.append(time.perf_counter())
         # output timing information

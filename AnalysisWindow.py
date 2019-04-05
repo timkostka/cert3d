@@ -5,6 +5,7 @@ import wx
 from AnalysisWindowBase import AnalysisWindowBase
 from BilevelData import BilevelData
 from ScopeChannel import ScopeChannel
+from ScopeChannel import Signal
 from PlotData import PlotData
 
 all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
@@ -20,19 +21,26 @@ class AnalysisWindow(AnalysisWindowBase):
                      'Z_STEP', 'Z_DIR', 'E_STEP', 'E_DIR']:
             data = BilevelData()
             channel = ScopeChannel(data)
-            channel.data.name = name
             channel.height = random.randint(30, 60)
-            channel.color = random.choice(all_colors)
-            channel.thickness = random.randint(1, 4)
-            channel.data.start_high = random.choice([True, False])
+            channel.signals[-1].name = name
+            channel.signals[-1].color = random.choice(all_colors)
+            channel.signals[-1].thickness = random.randint(1, 4)
+            channel.signals[-1].start_high = random.choice([True, False])
             self.scope_panel.add_channel(channel)
         for name in ['X_POS', 'Y_POS', 'Z_POS', 'E_POS']:
             data = PlotData()
             channel = ScopeChannel(data)
-            channel.data.name = name
+            channel.signals[-1].name = name
+            channel.signals[-1].color = random.choice(all_colors)
+            channel.signals[-1].thickness = random.randint(1, 4)
             channel.height = random.randint(90, 120)
-            channel.color = random.choice(all_colors)
-            channel.thickness = random.randint(1, 4)
+            data2 = PlotData()
+            signal2 = Signal(data2)
+            signal2.name = name + '2'
+            signal2.color = random.choice(all_colors)
+            signal2.thickness = random.randint(1, 4)
+            channel.add_signal(signal2)
             self.scope_panel.add_channel(channel)
+
         # zoom to all
         self.scope_panel.zoom_to_all()
