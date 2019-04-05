@@ -23,7 +23,7 @@ class BilevelData:
 
     def invent_data(self):
         """Populate with randomly generated data."""
-        self.data = [random.randint(1, 10) for _ in range(2000)]
+        self.data = [random.randint(1, 10) for _ in range(200)]
         self.start_time = 0.0
 
     def get_closest_edge_time(self, target_time):

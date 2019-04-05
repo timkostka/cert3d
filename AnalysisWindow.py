@@ -42,5 +42,9 @@ class AnalysisWindow(AnalysisWindowBase):
             channel.add_signal(signal2)
             self.scope_panel.add_channel(channel)
 
+        self.SetSize(2000, 1200)
+        self.Centre()
+        #self.Layou
+
         # zoom to all
         self.scope_panel.zoom_to_all()

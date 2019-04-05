@@ -27,8 +27,8 @@ class PlotData:
         self.start_time = 0.0
         phi = random.uniform(0.0, math.tau)
         period = random.uniform(20, 40)
-        for i in range(5000):
-            self.data.append((2 * i, math.sin(phi + i * math.tau / period)))
+        for i in range(200):
+            self.data.append((5 * i, math.sin(phi + i * math.tau / period)))
 
     def get_closest_edge_time(self, target_time):
         """Return the edge time closest to the target time, or None."""

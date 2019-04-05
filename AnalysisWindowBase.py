@@ -24,7 +24,7 @@ class AnalysisWindowBase(wx.Frame):
             id=wx.ID_ANY,
             title=u"Oscilloscope output",
             pos=wx.DefaultPosition,
-            size=wx.Size(2000, 1200),
+            size=wx.Size(800, 600),
             style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL,
         )
 
@@ -49,14 +49,14 @@ class AnalysisWindowBase(wx.Frame):
 
         bSizer51.Add(self.scope_panel, 1, wx.ALL | wx.EXPAND, 5)
 
-        self.m_scrollBar1 = wx.ScrollBar(
+        self.scope_scroll_bar = wx.ScrollBar(
             self,
             wx.ID_ANY,
             wx.DefaultPosition,
             wx.DefaultSize,
             wx.SB_HORIZONTAL,
         )
-        bSizer51.Add(self.m_scrollBar1, 0, wx.ALL | wx.EXPAND, 0)
+        bSizer51.Add(self.scope_scroll_bar, 0, wx.ALL | wx.EXPAND, 0)
 
         bSizer5.Add(bSizer51, 1, wx.EXPAND, 5)
 
@@ -66,26 +66,43 @@ class AnalysisWindowBase(wx.Frame):
 
         bSizer2.Add((0, 0), 1, wx.EXPAND, 5)
 
-        self.m_button1 = wx.Button(
+        self.button_done = wx.Button(
             self, wx.ID_ANY, u"Done", wx.DefaultPosition, wx.DefaultSize, 0
         )
-        bSizer2.Add(self.m_button1, 0, wx.ALIGN_RIGHT | wx.ALL, 5)
+        self.button_done.Hide()
+
+        bSizer2.Add(self.button_done, 0, wx.ALIGN_RIGHT | wx.ALL, 5)
 
         bSizer1.Add(bSizer2, 0, wx.EXPAND, 0)
 
         self.SetSizer(bSizer1)
         self.Layout()
-        self.m_statusBar1 = self.CreateStatusBar(1, wx.STB_SIZEGRIP, wx.ID_ANY)
+        self.status_bar = self.CreateStatusBar(1, wx.STB_SIZEGRIP, wx.ID_ANY)
+        self.menu_bar = wx.MenuBar(0)
+        self.menu_file = wx.Menu()
+        self.menu_file_exit = wx.MenuItem(
+            self.menu_file, wx.ID_ANY, u"E&xit", wx.EmptyString, wx.ITEM_NORMAL
+        )
+        self.menu_file.Append(self.menu_file_exit)
+
+        self.menu_bar.Append(self.menu_file, u"&File")
+
+        self.SetMenuBar(self.menu_bar)
 
         self.Centre(wx.BOTH)
 
         # Connect Events
-        #self.scope_panel.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
+        self.scope_panel.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
+        self.Bind(
+            wx.EVT_MENU, self.event_file_exit, id=self.menu_file_exit.GetId()
+        )
 
     def __del__(self):
         pass
 
-        # Virtual event handlers, overide them in your derived class
+    # Virtual event handlers, overide them in your derived class
+    def event_mouse_wheel(self, event):
+        event.Skip()
 
-    #def event_mouse_wheel(self, event):
-    #    event.Skip()
+    def event_file_exit(self, event):
+        event.Skip()
