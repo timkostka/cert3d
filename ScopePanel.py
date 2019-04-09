@@ -314,7 +314,7 @@ class ScopePanel(wx.Panel):
         self.seconds_per_pixel *= scale
         self.Refresh()
 
-    def time_to_x(self, time):
+    def get_x_from_time(self, time):
         """Return the x pixel value corresponding to the given time."""
         x = self.margin + self.channel_length + self.padding2
         x += (time - self.start_time) / self.seconds_per_pixel
@@ -414,6 +414,8 @@ class ScopePanel(wx.Panel):
             rect[0]
             + (data.start_time - self.start_time) / self.seconds_per_pixel
         )
+        # adjust for thickness of line
+        channel_left -= (signal.thickness - 1) / 2.0
         # true if signal is low
         # note we start on the opposite edge, since we flip it before drawing
         # the first plateau
@@ -578,7 +580,7 @@ class ScopePanel(wx.Panel):
             dc.SetTextBackground(wx.BLACK)
             dc.SetBackgroundMode(wx.SOLID)
             channel_index, _, start_time = self.snaptime_start
-            x1 = self.time_to_x(start_time)
+            x1 = self.get_x_from_time(start_time)
             y11, y12 = self.get_channel_y_values(channel_index)
             height = y12 - y11 + 1
             y11 += height // 6
@@ -588,7 +590,7 @@ class ScopePanel(wx.Panel):
             dc.DrawRectangle(x1 - delta, y11, thickness, y12 - y11 + 1)
             if self.snaptime_end:
                 channel_index, _, end_time = self.snaptime_end
-                x2 = self.time_to_x(end_time)
+                x2 = self.get_x_from_time(end_time)
                 y21, y22 = self.get_channel_y_values(channel_index)
                 height = y22 - y21 + 1
                 y21 += height // 6
