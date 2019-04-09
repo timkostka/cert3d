@@ -64,12 +64,14 @@ class ScopePanel(wx.Panel):
         self.channels = []
         # index of selected channel, or None
         self.selected_channel_index = None
-        # margin on all sides of display
-
         # (channel_index, y_value) used during rearranging channels
         self.dragging_channel = None
         # width of the snaptime display
         self.snaptime_frame_thickness = 3
+        # color of snaptime display
+        self.snaptime_frame_color = wx.YELLOW
+        # color of snaptime text
+        self.snaptime_text_color = wx.WHITE
         # padding between channels
         self.padding = 9
         # padding between name and channel data
@@ -78,18 +80,6 @@ class ScopePanel(wx.Panel):
         self.channel_separator_thickness = 3
         # margin in pixels all around
         self.margin = 5
-        ## number of channel
-        # self.channel_count = 4
-        # data for each channel
-        # self.channels = [BilevelData() for _ in range(4)]
-        # for i, channel in enumerate(self.channels):
-        #    channel.name = "DATA%d" % i
-        # data = decode_stepper(self.channels[0], self.channels[1])
-        # print(data)
-        # self.channels[0].name = "X_STEP"
-
-        # height of each channel in pixels
-        #self.channel_height = 30
         # padding around timestamp label
         self.padding_timestamp_label = 2
         # length of channel
@@ -124,7 +114,7 @@ class ScopePanel(wx.Panel):
             False,
             "Consolas",
         )
-        # either None or (channel_number, time)
+        # either None or (channel_index, signal_index, time)
         self.snaptime_start = None
         self.snaptime_end = None
         # prevent panel from shrinking too much
@@ -325,10 +315,10 @@ class ScopePanel(wx.Panel):
         self.Refresh()
 
     def time_to_x(self, time):
-        """Return the x value corresponding to the given time."""
+        """Return the x pixel value corresponding to the given time."""
         x = self.margin + self.channel_length + self.padding2
         x += (time - self.start_time) / self.seconds_per_pixel
-        return x
+        return int(x + 0.5)
 
     def get_time_from_x(self, x):
         """Return the time value corresponding to the x position."""
@@ -582,12 +572,17 @@ class ScopePanel(wx.Panel):
             # get amount to offset due to snaptime frame thickness
             thickness = self.snaptime_frame_thickness
             delta = thickness // 2
-            dc.SetPen(wx.Pen(wx.RED, 1))
-            dc.SetBrush(wx.Brush(wx.RED))
-            dc.SetTextForeground(wx.WHITE)
+            dc.SetPen(wx.Pen(self.snaptime_frame_color, 1))
+            dc.SetBrush(wx.Brush(self.snaptime_frame_color))
+            dc.SetTextForeground(self.snaptime_text_color)
+            dc.SetTextBackground(wx.BLACK)
+            dc.SetBackgroundMode(wx.SOLID)
             channel_index, _, start_time = self.snaptime_start
             x1 = self.time_to_x(start_time)
             y11, y12 = self.get_channel_y_values(channel_index)
+            height = y12 - y11 + 1
+            y11 += height // 6
+            y12 -= height // 6
             y1 = (y11 + y12) / 2
             # draw start time selection
             dc.DrawRectangle(x1 - delta, y11, thickness, y12 - y11 + 1)
@@ -595,12 +590,15 @@ class ScopePanel(wx.Panel):
                 channel_index, _, end_time = self.snaptime_end
                 x2 = self.time_to_x(end_time)
                 y21, y22 = self.get_channel_y_values(channel_index)
+                height = y22 - y21 + 1
+                y21 += height // 6
+                y22 -= height // 6
                 y2 = (y21 + y22) / 2
                 # draw end time selection
                 #dc.DrawLine(x2, y21, x2, y22)
                 dc.DrawRectangle(x2 - delta, y21, thickness, y22 - y21 + 1)
                 # draw line connecting them
-                x3 = (x1 + x2) / 2
+                x3 = (x1 + x2) // 2
                 #dc.DrawLine(x1, y1, x3, y1)
                 dc.DrawRectangle(x1 - delta, y1 - delta, x3 - x1 + thickness, thickness)
                 #dc.DrawLine(x3, y1, x3, y2)
@@ -613,18 +611,27 @@ class ScopePanel(wx.Panel):
                 rect = dc.GetFullTextExtent(text)
                 width = rect[0]
                 height = rect[1]
+                # add space for padding between label and frame
                 width += 2 * self.padding_timestamp_label
                 height += 2 * self.padding_timestamp_label
-                #width += 2 * thickness
-                #height += 2 * thickness
+                # add space for frame
+                width += 2 * thickness
+                height += 2 * thickness
                 x = x3
                 y = (y1 + y2) / 2
-                x -= width / 2
-                y -= height / 2
-                x -= delta
-                y -= delta
+                x -= width // 2
+                y -= height // 2
+                dc.DrawRectangle(x, y, width, height)
+
+                # draw background of text
                 dc.SetBrush(wx.BLACK_BRUSH)
                 dc.DrawRectangle(x, y, width, height)
+                dc.SetBrush(wx.Brush(self.snaptime_frame_color))
+                # draw a rectangle using lines
+                dc.DrawRectangle(x, y, width, thickness)
+                dc.DrawRectangle(x, y + height - thickness, width, thickness)
+                dc.DrawRectangle(x, y, thickness, height)
+                dc.DrawRectangle(x + width - thickness, y, thickness, height)
                 x += self.padding_timestamp_label + thickness
                 y += self.padding_timestamp_label + thickness
                 dc.DrawText(text, x, y)
