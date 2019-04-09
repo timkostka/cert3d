@@ -92,7 +92,6 @@ class AnalysisWindowBase(wx.Frame):
         self.Centre(wx.BOTH)
 
         # Connect Events
-        self.scope_panel.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
         self.Bind(
             wx.EVT_MENU, self.event_file_exit, id=self.menu_file_exit.GetId()
         )
@@ -101,8 +100,5 @@ class AnalysisWindowBase(wx.Frame):
         pass
 
     # Virtual event handlers, overide them in your derived class
-    def event_mouse_wheel(self, event):
-        event.Skip()
-
     def event_file_exit(self, event):
         event.Skip()

@@ -48,3 +48,7 @@ class AnalysisWindow(AnalysisWindowBase):
 
         # zoom to all
         self.scope_panel.zoom_to_all()
+
+    def event_file_exit( self, event ):
+        self.Close()
+        #event.Skip()

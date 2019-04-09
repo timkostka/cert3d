@@ -24,7 +24,7 @@ def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
         dir_it = iter(dir_channel.data)
         dir_is_low = not dir_channel.start_high
         remaining_dir_ticks = next(dir_it)
-        assert step_channel.start_high == False
+        assert step_channel.start_high is False
         step_is_low = not step_channel.start_high
         ticks = 0
         for pulse in step_channel.data:
@@ -463,28 +463,26 @@ class ScopePanel(wx.Panel):
         top_value -= (signal.thickness // 2) / pixels_per_value
         # set the drawing pen
         dc.SetPen(wx.Pen(signal.color, signal.thickness))
-        x1 = None
-        y1 = None
-        for point in data.data:
-            x2, y2 = x1, y1
-            x1 = int(channel_left + point[0] * pixels_per_tick + 0.5)
-            y1 = int(rect[1] + (point[1] - top_value) * pixels_per_value + 0.5)
-            if x2 is not None and x1 <= right and x2 >= left:
-            #if x2 is not None:
-                #if x1 <= right and x2 >= left:
+        x2 = None
+        y2 = None
+        for point in data.data[1:]:
+            x1, y1 = x2, y2
+            x2 = int(channel_left + point[0] * pixels_per_tick + 0.5)
+            y2 = int(rect[1] + (point[1] - top_value) * pixels_per_value + 0.5)
+            # exit if we're drawing offscreen
+            if x1 is None:
+                continue
+            if x1 > right:
+                break
+            if x2 >= left:
                 dc.DrawLine(x1, y1, x2, y2)
         dc.DestroyClippingRegion()
 
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
-        #dc = wx.PaintDC(self)
         dc = wx.AutoBufferedPaintDC(self)
-        #dc = wx.GCDC(dc)
-        dc.SetBackground(wx.BLACK_BRUSH)
+        #dc.SetBackground(wx.BLACK_BRUSH)
         dc.Clear()
-        # draw channel names
-        #dc.SetPen(wx.Pen(wx.GREEN, 1))
-        #dc.SetBrush(wx.GREEN_BRUSH)
         # get leftmost pixel we can draw for scope view
         left = self.margin + self.channel_length + self.padding2
         # get rightmost pixel to draw for scope view
