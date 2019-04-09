@@ -30,14 +30,12 @@ class PlotData:
         for i in range(200):
             self.data.append((5 * i, math.sin(phi + i * math.tau / period)))
 
-    def get_closest_edge_time(self, target_time):
+    def get_closest_time(self, target_time):
         """Return the edge time closest to the target time, or None."""
         if len(self.data) == 0:
             return None
         time = self.start_time
-        tick_count = 0
-        for ticks in self.data:
-            tick_count += ticks
+        for tick_count, _ in self.data:
             this_time = self.start_time + tick_count * self.seconds_per_tick
             if abs(this_time - target_time) < abs(time - target_time):
                 time = this_time

@@ -26,7 +26,7 @@ class BilevelData:
         self.data = [random.randint(1, 10) for _ in range(200)]
         self.start_time = 0.0
 
-    def get_closest_edge_time(self, target_time):
+    def get_closest_time(self, target_time):
         """Return the edge time closest to the target time, or None."""
         if len(self.data) == 0:
             return None
