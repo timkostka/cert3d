@@ -125,6 +125,98 @@ We need 2 more slow speed channels to monitor Z.
 
 * TIM3_CH2 - DMA1 Stream 5
 
+### Timer triggering
+
+We need to start all timers at the same time in order to get relative timing correct between channels.  We can do this by setting up TIM3 and TIM8 in slave mode that trigger off of TIM1_TRGO signal.  For TIM3, this is the ITR0 trigger per Table 98 in RM90.  For TIM8, this is also ITRO0 per Table 94.
+
+We want all timers to be in sync so that CNT register values are identical between them.  We can do this by triggering them to start at the same time.  I set up TIM1 in master mode and had TIM3 and TIM8 trigger off of it.  Doing this, there was a delay of 18-20 ticks between TIM1 and TIM8.  In other words, `TIM1->CNT = TIM8->CNT + (18 to 20)`.  This isn't desirable.
+
+Can I use a different timer to trigger TIM1, TIM3 and TIM8 all at the same time?  The delay between the trigger and the timer starting should be the same for all three.
+
+* TIM1 can be triggered from TIM5 (ITR0), TIM2 (ITR1), TIM3 (ITR2), and TIM4 (ITR3)
+* TIM3 can be triggered from TIM1 (ITR0), TIM2 (ITR1), TIM5 (ITR2), and TIM4 (ITR3)
+* TIM8 can be triggered from TIM1 (ITR0), TIM2 (ITR1), TIM4 (ITR2), and TIM5 (ITR3)
+
+So yes, we can use TIM2 to trigger the other three.  Conveniently, they all use the same ITR1 signal to do so.  I did this and the timers appear to be perfectly in sync.  I got a difference of 8 ticks if I read them in one direction and -8 ticks if I reversed the order that I read them.  So probably exactly the same.
+
+### Signal buffers
+
+We need a buffer to store the timer CNT values at each edge change.  How large should this buffer be?  Our high speed timers reset at `65536/168MHz=2.5kHz`.  We want to process values at at least twice this rate in order to correctly interpret their CNT value.
+
+Step rates for 3d printers (taken from https://reprap.org/wiki/Step_rates) top out at around 180kHz for 3 motors.  For a single motor, this is an edge generation rate of 360kHz.  Each edge needs 2 bytes.  If we process at 5kHz, then the buffer needs to be at least `360kHz * 2 byte / (5kHz) = 144 bytes`.  That's extremely small.  No problem.
+
+Three motors running at 180kHz will produce 6 edges at 180kHz, which will create 8.64Mpbs of data.  This is too much to handle, but we could probably handle about half of that.  It's very unlikely to be running three motors this fast.
+
+#### Buffer monitor callback
+
+The buffers will be monitored by a callback at a frequency of around 5kHz.  On each pass, we need to monitor the signal lines and pass along information about any edges detected.
+
+I clearly need an output buffer, where information goes when it's ready to be sent out.  The USB will read directly from this buffer when it is sending information.  This is the same way the debug log operates.
+
+Maybe I need a staging buffer for each signal line where I translate the data so it's ready for output.  When these staging buffers get full enough, I can send out their info to the output buffer.  That seems good.
+
+#### Output buffer
+
+The output buffer information will be organized as follows:
+
+The buffer will be primary in `uint16_t` format, occasionally putting two `uint8_t` values into a single `uint16_t`.
+
+* Sync word at beginning `0x0B77`
+
+* Channel number as a `uint16_t`
+
+* Size of the of entries as a `uint16_t`
+
+* Each entry as a single `uint16_t`
+
+This structure repeats as necessary for each channel.
+
+For signal channels, the `uint16_t` data entry represents the number of ticks between edges.  If the number of ticks is more than 65535, we encode it instead as a `uint16_t` of 0, then a `uint32_t` of the number of ticks.
+
+On second thought, this requires us to do more calculations on the mcu.  I'd rather move processing of data to the computer.
+
+#### Output processing try #2
+
+We keep the output buffer.  However, a packet is sent on every processing step.  Each packet has the following info:
+
+* Sync word `0x0B77`
+
+* Packet number as `uint16_t`, first is 0, increments 1 each time, eventually flows over.
+
+* For each signal channel (number of channels is known)
+
+  * Number of entries as a `uint16_t` in channel `N`
+  
+  * Entry #1
+  
+  * Entry #2
+  
+  * etc...
+
+The entries are the `TIMx->CNT` values.  Post-processing is done on the computer side to get the number of ticks between edges.
+
+The computer can also detect missed packets (if any) since the packet number is included.
+
+If no edges are detected, each packet is `2 + 2 + 8 * 2 = 20` bytes.  At a packet rate of 5kHz, this comes to 0.8 Mbps.  That's a bit much for purely overhead.
+
+### ADC triggering
+
+We should also set up the ADC to trigger off a timer in order to keep relative timing correct, although the rate of ADC triggers should be pretty slow in order to keep bandwidth reasonable.
+
+I did this.  The ADC triggers off of `TIM2_TRGO` signal.  Maybe I should move it somewhere else so I can independently adjust the frequency of samples?  The only options for the are TIM1, TIM2, TIM3, and TIM8.  I'm keeping TIM1 and TIM8 for their high speed edge detection, so TIM2 will have to trigger the ADCs.  And rev1 hardware has TIM3 reserved as well.  So I'm stuck with TIM2.  Can I get the other three to trigger off of a different timer?  Yes, they can all be triggered off of TIM4.
+
+### ADC sampling
+
+How many samples should I take?
+
+The ADC clock can run at a max of 36MHz.  If we have a system clock of 168 MHz and an APB2 clock of 84 MHz, we need to use a prescaler of 4, which gives us an ADC clock of 21 MHz.
+
+It takes 15 clocks to convert a reading into a value.  This is in addition to the sampling time.
+
+Say we wanted a reading on every channel at 10kHz.  With 14 channels, each sample needs to be done at 140kHz.  At a clock of 21MHz, this gives us 150 clocks per sample.  So we could choose the `ADC_SAMPLETIME_112CYCLES` sample time.  That seems fine.
+
+At this rate, we would be generating `14 * 10kHz * 12 bit = 1.68Mbps`.  That still seems a bit high.  Let's sample at 1kHz to start.
+
 ### UART debug channel
 
 This channel is used as a debug stream.
