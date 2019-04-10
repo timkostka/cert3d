@@ -51,7 +51,7 @@ class AnalysisWindow(AnalysisWindowBase):
         self.Centre()
 
         # zoom to all
-        self.scope_panel.zoom_to_all(0.5, 0.501)
+        self.scope_panel.zoom_to_all(0.5, 0.50001)
 
     def event_file_exit( self, event ):
         self.Close()

@@ -28,7 +28,7 @@ class BilevelData:
         if not self.data:
             return None
         low = 0
-        high = len(self.data)
+        high = len(self.data) - 1
         # loop until low and high are adjacent
         while low < high:
             test = (low + high) // 2
@@ -69,7 +69,7 @@ class BilevelData:
         tick_count = 0
         self.data = [0.0]
         for _ in range(length):
-            tick_count += random.randint(1, 10)
+            tick_count += round(1.0 + 9.0 * random.random())
             self.data.append(tick_count)
         self.start_time = 0.0
 
