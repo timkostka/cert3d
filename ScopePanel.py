@@ -409,7 +409,7 @@ class ScopePanel(wx.Panel):
         top += channel_index * self.padding
         return top, top + self.channels[channel_index].height - 1
 
-    def zoom_to_all(self):
+    def zoom_to_all(self, start=0.0, end=1.0):
         """Initialize the viewing window to see all data."""
         if not self.channels:
             return
@@ -423,6 +423,11 @@ class ScopePanel(wx.Panel):
                 )
         left = min(start_times) if start_times else 0.0
         right = max(end_times) if end_times else 0.0
+        if start != 0.0 or end != 1.0:
+            assert start < end
+            duration = right - left
+            right = left + end * duration
+            left = left + start * duration
         self.start_time = left
         self.seconds_per_pixel = 1.0
         if right != left:
@@ -438,6 +443,7 @@ class ScopePanel(wx.Panel):
             if low_values:
                 channel.low_value = min(low_values)
                 channel.high_value = max(high_values)
+
 
     @staticmethod
     def draw_clipped_rectangle(dc, x, y, w, h, x1, x2):
@@ -486,7 +492,7 @@ class ScopePanel(wx.Panel):
         data = signal.data
         # get pixels per tick
         pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
-        # draw x pixel of start of channel data
+        # find x pixel of start of channel data
         channel_left = (
             rect[0]
             + (data.start_time - self.start_time) / self.seconds_per_pixel
@@ -504,6 +510,43 @@ class ScopePanel(wx.Panel):
         thickness = signal.thickness
         left = rect[0]
         right = rect[0] + rect[2] - 1
+        # find first index within window
+        index = data.find_index_after(self.start_time)
+        if index:
+            index -= 1
+        if index % 2 == 1:
+            signal_low = not signal_low
+        time = data.start_time + data.data[index] * data.seconds_per_tick
+        x2 = left + round((time - self.start_time) / self.seconds_per_pixel)
+        while True:
+            x1 = x2
+            # if we're past the viewing window, we're done
+            if x1 > right:
+                break
+            # if not the first point, draw the vertical line
+            # if i2 > 0: # and left <= x1 <= right:
+            if index > 0:
+                dc.DrawRectangle(x1, y1, thickness, height)
+            # go to the next value
+            index += 1
+            signal_low = not signal_low
+            if index >= len(data.data):
+                break
+            time = data.start_time + data.data[index] * data.seconds_per_tick
+            # ticks += length
+            x2 = left + round((time - self.start_time) / self.seconds_per_pixel)
+            # if in range, draw the edge
+            # if False and (x2 < left or x1 > right):
+            #    pass
+            # else:
+            if x1 <= right and x2 >= left:
+                y = y2 - thickness + 1 if signal_low else y1
+                dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
+        dc.DestroyClippingRegion()
+        return
+        #while index < len(data.data):
+        #    pass
+
         # number of ticks for current data point
         ticks = 0
         for i2, length in enumerate(data.data):
