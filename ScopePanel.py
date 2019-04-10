@@ -4,6 +4,7 @@ This implements a custom wx control to view .
 """
 
 import time
+import math
 
 import wx
 
@@ -95,6 +96,10 @@ class ScopePanel(wx.Panel):
         self.selecting_time = False
         # maximum distance in pixels to snap to a time value
         self.snap_distance = 20
+        # delta time unit for horizontal axis (e.g. 10e-9)
+        self.best_dt = None
+        # name of the dt (e.g. "10 ns")
+        self.best_dt_text = None
         # font for labels
         self.font_label = wx.Font(
             9,
@@ -187,6 +192,7 @@ class ScopePanel(wx.Panel):
         # we either try to drag a channel, or try to select a snapline
         x_separator = self.margin + self.channel_length + self.padding2
         if event.GetPosition()[0] < x_separator:
+            # reset snaptime if present
             y = event.GetPosition()[1]
             for i in range(len(self.channels)):
                 y1, y2 = self.get_channel_y_values(i)
@@ -499,14 +505,72 @@ class ScopePanel(wx.Panel):
                 dc.DrawLine(x1, y1, x2, y2)
         dc.DestroyClippingRegion()
 
+    def find_dt(self):
+        """Evaluate the best time delta for the given scale."""
+        # get the width of some standard text
+        dc = wx.PaintDC(self)
+        dc.SetFont(wx.Font(
+            9,
+            wx.FONTFAMILY_MODERN,
+            wx.FONTSTYLE_NORMAL,
+            wx.FONTWEIGHT_NORMAL,
+            False,
+            "Consolas",
+        ))
+        rect = dc.GetFullTextExtent("Target width    ")
+        target_width = rect[0]
+        print('Target dt width is %d pixels' % target_width)
+        scale = [1.0, 1e-3, 1e-6, 1e-9]
+        units = ['s', 'ms', 'us', 'ns']
+        multiples = [1, 2, 5]
+        target_dt = self.seconds_per_pixel * target_width
+        possibles = []
+        print('Looking for increment near %g s.' % target_dt)
+        # human dt
+        best_diff = None
+        best_dt = None
+        best_dt_text = None
+        #best_dt_pixels = None
+        for m in multiples:
+            # find target of the form dt = m * 10^x for some interger x
+            # dt = m * 10^x
+            # dt / m = 10^x
+            # log10(dt / m) = x
+            x = round(math.log10(target_dt / m))
+            this_dt = m * 10 ** x
+            #this_pixels = this_dt / self.seconds_per_pixel
+            this_diff = abs(target_dt - this_dt)
+            if best_diff is None or this_diff < best_diff:
+                best_diff = this_diff
+                best_dt = this_dt
+        # find the best text
+        for unit, name in zip(scale, units):
+            if unit <= best_dt:
+                best_dt_text = '%d %s' % (round(best_dt / unit), name)
+                break
+        if best_dt_text is None:
+            best_dt_text = '%g' % best_dt
+        print('Best dt was %s' % best_dt_text)
+        self.best_dt = best_dt
+        self.best_dt_text = best_dt_text
+        print(possibles)
+
     def event_paint(self, event):
         """Handle the EVT_PAINT event."""
+        self.find_dt()
         dc = wx.AutoBufferedPaintDC(self)
         dc.Clear()
         # get leftmost pixel we can draw for scope view
         left = self.margin + self.channel_length + self.padding2
+        # get size of panel
+        panel_rect = self.GetSize()
         # get rightmost pixel to draw for scope view
-        right = self.GetSize()[0] - 1
+        right = panel_rect[0] - 1
+        # draw vertical bars for dt resolution
+        dc.SetPen(wx.Pen(wx.LIGHT_GREY, 1))
+        dt_pixels = round(self.best_dt / self.seconds_per_pixel)
+        for x in range(left, right + 1, dt_pixels):
+            dc.DrawRectangle(round(x), 0, 1, panel_rect[1])
         # get top pixel for next channel
         top = 0
         timings = []
