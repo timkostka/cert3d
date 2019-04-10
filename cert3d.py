@@ -9,12 +9,10 @@ import ctypes
 
 # from BilevelData import BilevelData
 # from ScopePanel import ScopePanel
-from BilevelData import BilevelData
+# from BilevelData import BilevelData
 from AnalysisWindow import AnalysisWindow
 
 system_dpi = 96
-
-
 
 
 def get_system_dpi():
@@ -43,8 +41,6 @@ def adjusted_size(size):
     if isinstance(size, wx.Size):
         return wx.Size(adjusted_size(size[0]), adjusted_size(size[1]))
     raise ValueError
-
-
 
 
 def run_gui():

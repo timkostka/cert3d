@@ -112,13 +112,15 @@ class ScopePanel(wx.Panel):
 
         # font for timestamps
         self.font_timestamp = wx.Font(
-            7,
+            10,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
-            wx.FONTWEIGHT_NORMAL,
+            wx.FONTWEIGHT_BOLD,
             False,
-            "Consolas",
+            "Calibri",
         )
+        # margin for snaptime label
+        self.snaptime_margin = [3, -4]
         # either None or (channel_index, signal_index, time)
         self.snaptime_start = None
         self.snaptime_end = None
@@ -177,8 +179,9 @@ class ScopePanel(wx.Panel):
         for signal_index, signal in enumerate(channel.signals):
             this_time = signal.data.get_closest_time(target_time)
             if this_time is not None:
-                if closest_time is None or abs(this_time - target_time) < best_delta:
-                    best_delta = abs(this_time - target_time)
+                this_delta = abs(this_time - target_time)
+                if closest_time is None or this_delta < best_delta:
+                    best_delta = this_delta
                     closest_time = (channel_index, signal_index, this_time)
         if closest_time is None:
             return None
@@ -250,7 +253,7 @@ class ScopePanel(wx.Panel):
             self.panning = True
             self.SetCursor(wx.Cursor(wx.CURSOR_SIZEWE))
 
-    def event_mouse_right_button_up(self, event):
+    def event_mouse_right_button_up(self, _event):
         # print('right button up')
         if self.panning:
             self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
@@ -320,10 +323,10 @@ class ScopePanel(wx.Panel):
         self.seconds_per_pixel *= scale
         self.Refresh()
 
-    def get_x_from_time(self, time):
-        """Return the x pixel value corresponding to the given time."""
+    def get_x_from_time(self, duration):
+        """Return the x pixels corresponding to the given duration."""
         x = self.margin + self.channel_length + self.padding2
-        x += (time - self.start_time) / self.seconds_per_pixel
+        x += (duration - self.start_time) / self.seconds_per_pixel
         return int(x + 0.5)
 
     def get_time_from_x(self, x):
@@ -381,31 +384,31 @@ class ScopePanel(wx.Panel):
         dc.DrawRectangle(x, y, w, h)
 
     @staticmethod
-    def time_to_text(time):
+    def time_to_text(time_s):
         """Convert the time in seconds to a text value."""
-        if time == 0:
+        if time_s == 0:
             return "0"
-        abstime = abs(time)
+        abstime = abs(time_s)
         if abstime < 10e-9:
-            return "%.2f ns" % (time * 1e9)
+            return "%.2f ns" % (time_s * 1e9)
         elif abstime < 100e-9:
-            return "%.1fns" % (time * 1e9)
+            return "%.1fns" % (time_s * 1e9)
         elif abstime < 1000e9:
-            return "%.0fns" % (time * 1e9)
+            return "%.0fns" % (time_s * 1e9)
         elif abstime < 10e6:
-            return "%.2fus" % (time * 1e9)
+            return "%.2fus" % (time_s * 1e9)
         elif abstime < 100e6:
-            return "%.1fus" % (time * 1e9)
+            return "%.1fus" % (time_s * 1e9)
         elif abstime < 1000e6:
-            return "%.0fus" % (time * 1e9)
+            return "%.0fus" % (time_s * 1e9)
         elif abstime < 10e3:
-            return "%.2fms" % (time * 1e9)
+            return "%.2fms" % (time_s * 1e9)
         elif abstime < 100e3:
-            return "%.1fms" % (time * 1e9)
+            return "%.1fms" % (time_s * 1e9)
         elif abstime < 1000e3:
-            return "%.0fms" % (time * 1e9)
+            return "%.0fms" % (time_s * 1e9)
         else:
-            return "%gs" % time
+            return "%gs" % time_s
 
     def draw_bileveldata_channel(self, dc, rect, channel, signal):
         """Draw a channel of type BilevelData to the given rectangular region"""
@@ -509,36 +512,34 @@ class ScopePanel(wx.Panel):
         """Evaluate the best time delta for the given scale."""
         # get the width of some standard text
         dc = wx.PaintDC(self)
-        dc.SetFont(wx.Font(
-            9,
-            wx.FONTFAMILY_MODERN,
-            wx.FONTSTYLE_NORMAL,
-            wx.FONTWEIGHT_NORMAL,
-            False,
-            "Consolas",
-        ))
+        dc.SetFont(
+            wx.Font(
+                9,
+                wx.FONTFAMILY_MODERN,
+                wx.FONTSTYLE_NORMAL,
+                wx.FONTWEIGHT_NORMAL,
+                False,
+                "Consolas",
+            )
+        )
         rect = dc.GetFullTextExtent("Target width    ")
         target_width = rect[0]
-        print('Target dt width is %d pixels' % target_width)
+        print("Target dt width is %d pixels" % target_width)
         scale = [1.0, 1e-3, 1e-6, 1e-9]
-        units = ['s', 'ms', 'us', 'ns']
+        units = ["s", "ms", "us", "ns"]
         multiples = [1, 2, 5]
         target_dt = self.seconds_per_pixel * target_width
         possibles = []
-        print('Looking for increment near %g s.' % target_dt)
+        print("Looking for increment near %g s." % target_dt)
         # human dt
         best_diff = None
-        best_dt = None
+        best_dt = 0.0
         best_dt_text = None
-        #best_dt_pixels = None
+        # best_dt_pixels = None
         for m in multiples:
             # find target of the form dt = m * 10^x for some interger x
-            # dt = m * 10^x
-            # dt / m = 10^x
-            # log10(dt / m) = x
             x = round(math.log10(target_dt / m))
             this_dt = m * 10 ** x
-            #this_pixels = this_dt / self.seconds_per_pixel
             this_diff = abs(target_dt - this_dt)
             if best_diff is None or this_diff < best_diff:
                 best_diff = this_diff
@@ -546,16 +547,16 @@ class ScopePanel(wx.Panel):
         # find the best text
         for unit, name in zip(scale, units):
             if unit <= best_dt:
-                best_dt_text = '%d %s' % (round(best_dt / unit), name)
+                best_dt_text = "%d %s" % (round(best_dt / unit), name)
                 break
-        if best_dt_text is None:
-            best_dt_text = '%g' % best_dt
-        print('Best dt was %s' % best_dt_text)
+        if best_dt_text is None and best_dt is not None:
+            best_dt_text = "%g" % best_dt
+        print("Best dt was %s" % best_dt_text)
         self.best_dt = best_dt
         self.best_dt_text = best_dt_text
         print(possibles)
 
-    def event_paint(self, event):
+    def event_paint(self, _event):
         """Handle the EVT_PAINT event."""
         self.find_dt()
         dc = wx.AutoBufferedPaintDC(self)
@@ -567,7 +568,7 @@ class ScopePanel(wx.Panel):
         # get rightmost pixel to draw for scope view
         right = panel_rect[0] - 1
         # draw vertical bars for dt resolution
-        dc.SetPen(wx.Pen(wx.LIGHT_GREY, 1))
+        dc.SetPen(wx.Pen(wx.Colour(31, 31, 31), 1))
         dt_pixels = round(self.best_dt / self.seconds_per_pixel)
         for x in range(left, right + 1, dt_pixels):
             dc.DrawRectangle(round(x), 0, 1, panel_rect[1])
@@ -635,6 +636,8 @@ class ScopePanel(wx.Panel):
         )
         # draw snap time
         if self.snaptime_start:
+            # set clipping region to right half
+            dc.SetClippingRegion(left, 0, panel_rect[0] - left, panel_rect[1])
             # get amount to offset due to snaptime frame thickness
             thickness = self.snaptime_frame_thickness
             delta = thickness // 2
@@ -661,16 +664,22 @@ class ScopePanel(wx.Panel):
                 y22 -= height // 6
                 y2 = (y21 + y22) / 2
                 # draw end time selection
-                #dc.DrawLine(x2, y21, x2, y22)
+                # dc.DrawLine(x2, y21, x2, y22)
                 dc.DrawRectangle(x2 - delta, y21, thickness, y22 - y21 + 1)
                 # draw line connecting them
                 x3 = (x1 + x2) // 2
-                #dc.DrawLine(x1, y1, x3, y1)
-                dc.DrawRectangle(x1 - delta, y1 - delta, x3 - x1 + thickness, thickness)
-                #dc.DrawLine(x3, y1, x3, y2)
-                dc.DrawRectangle(x3 - delta, y1 - delta, thickness, y2 - y1 + thickness)
-                #dc.DrawLine(x3, y2, x2, y2)
-                dc.DrawRectangle(x3 - delta, y2 - delta, x2 - x3 + thickness, thickness)
+                # dc.DrawLine(x1, y1, x3, y1)
+                dc.DrawRectangle(
+                    x1 - delta, y1 - delta, x3 - x1 + thickness, thickness
+                )
+                # dc.DrawLine(x3, y1, x3, y2)
+                dc.DrawRectangle(
+                    x3 - delta, y1 - delta, thickness, y2 - y1 + thickness
+                )
+                # dc.DrawLine(x3, y2, x2, y2)
+                dc.DrawRectangle(
+                    x3 - delta, y2 - delta, x2 - x3 + thickness, thickness
+                )
                 # draw time between
                 dc.SetFont(self.font_timestamp)
                 text = self.time_to_text(end_time - start_time)
@@ -678,8 +687,8 @@ class ScopePanel(wx.Panel):
                 width = rect[0]
                 height = rect[1]
                 # add space for padding between label and frame
-                width += 2 * self.padding_timestamp_label
-                height += 2 * self.padding_timestamp_label
+                width += 2 * self.snaptime_margin[0]
+                height += 2 * self.snaptime_margin[1]
                 # add space for frame
                 width += 2 * thickness
                 height += 2 * thickness
@@ -693,11 +702,14 @@ class ScopePanel(wx.Panel):
                 dc.SetBrush(wx.BLACK_BRUSH)
                 dc.DrawRectangle(x, y, width, height)
                 dc.SetBrush(wx.Brush(self.snaptime_frame_color))
+                # draw text
+                x += self.snaptime_margin[0] + thickness
+                y += self.snaptime_margin[1] + thickness
+                dc.DrawText(text, x, y)
+                x -= self.snaptime_margin[0] + thickness
+                y -= self.snaptime_margin[1] + thickness
                 # draw a rectangle using lines
                 dc.DrawRectangle(x, y, width, thickness)
                 dc.DrawRectangle(x, y + height - thickness, width, thickness)
                 dc.DrawRectangle(x, y, thickness, height)
                 dc.DrawRectangle(x + width - thickness, y, thickness, height)
-                x += self.padding_timestamp_label + thickness
-                y += self.padding_timestamp_label + thickness
-                dc.DrawText(text, x, y)
