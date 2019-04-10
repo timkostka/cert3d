@@ -60,7 +60,7 @@ def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
 
 class ScopePanel(wx.Panel):
     def __init__(self, parent, id_, position, size, style):
-        print("Initializing!")
+        # print("Initializing!")
         super().__init__(parent, id_, position, size, style)
 
         # create popup menu for signal style
@@ -68,18 +68,7 @@ class ScopePanel(wx.Panel):
         # create the context popup handler
         self.Bind(wx.EVT_MENU, self.event_popup_menu_item_selected)
         self.Bind(wx.EVT_CONTEXT_MENU, self.event_show_popup)
-
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
-        # self.SetFont(
-        #    wx.Font(
-        #        9,
-        #        wx.FONTFAMILY_MODERN,
-        #        wx.FONTSTYLE_NORMAL,
-        #        wx.FONTWEIGHT_BOLD,
-        #        False,
-        #        "Consolas",
-        #    )
-        # )
         # list of channels
         self.channels = []
         # index of selected channel, or None
@@ -137,7 +126,7 @@ class ScopePanel(wx.Panel):
         dc.SetFont(self.font_signal_name)
         # height of a signal name in pixels
         self.signal_name_height = dc.GetFullTextExtent("X")[1]
-        print("Signal name height is", self.signal_name_height)
+        # print("Signal name height is", self.signal_name_height)
         # font for timestamps
         self.font_timestamp = wx.Font(
             9,
@@ -178,8 +167,10 @@ class ScopePanel(wx.Panel):
     def create_stipple_bitmap(self, color):
         """Return the stipple bitmap for the given color."""
         rgb = color.GetRGB()
+        # if we already created and cached this one, just return it
         if rgb in self.stipple_brushes:
             return self.stipple_brushes[rgb]
+        # create a new bitmap stipple mask
         image = wx.Image(32, 32, clear=True)
         image.InitAlpha()
         for x in range(image.GetWidth()):
@@ -187,7 +178,8 @@ class ScopePanel(wx.Panel):
                 if (2 * x + y) % 16 < 8:
                     image.SetAlpha(x, y, wx.ALPHA_TRANSPARENT)
                 else:
-                    image.SetRGB(x, y, color.Red(), color.Green(), color.Blue())
+                    rgb = (color.Red(), color.Green(), color.Blue())
+                    image.SetRGB(x, y, *rgb)
         bmp = wx.Bitmap(image)
         self.stipple_brushes[rgb] = bmp
         return bmp
@@ -463,7 +455,6 @@ class ScopePanel(wx.Panel):
                 channel.low_value = min(low_values)
                 channel.high_value = max(high_values)
 
-
     @staticmethod
     def draw_clipped_rectangle(dc, x, y, w, h, x1, x2):
         # check that we're in bounds
@@ -536,7 +527,9 @@ class ScopePanel(wx.Panel):
             dc.DestroyClippingRegion()
             return
         # find first index after window
-        right_index = data.find_closest_index(self.start_time + (right - left + 1) * self.seconds_per_pixel)
+        right_index = data.find_closest_index(
+            self.start_time + (right - left + 1) * self.seconds_per_pixel
+        )
         # if there are more than 1 edge per pixel, just draw a grayed out signal
         if right_index - index > (right - left) * 0.5:
             # clip rectangle to data region
@@ -578,7 +571,9 @@ class ScopePanel(wx.Panel):
                 break
             time = data.start_time + data.data[index] * data.seconds_per_tick
             # ticks += length
-            x2 = left + round((time - self.start_time) / self.seconds_per_pixel)
+            x2 = left + round(
+                (time - self.start_time) / self.seconds_per_pixel
+            )
             # if in range, draw the edge
             # if False and (x2 < left or x1 > right):
             #    pass
@@ -588,7 +583,7 @@ class ScopePanel(wx.Panel):
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
         return
-        #while index < len(data.data):
+        # while index < len(data.data):
         #    pass
 
         # number of ticks for current data point
@@ -679,13 +674,12 @@ class ScopePanel(wx.Panel):
         )
         rect = dc.GetFullTextExtent("Target width    ")
         target_width = rect[0]
-        print("Target dt width is %d pixels" % target_width)
+        # print("Target dt width is %d pixels" % target_width)
         scale = [1.0, 1e-3, 1e-6, 1e-9]
         units = ["s", "ms", "us", "ns"]
         multiples = [1, 2, 5]
         target_dt = self.seconds_per_pixel * target_width
-        possibles = []
-        print("Looking for increment near %g s." % target_dt)
+        # print("Looking for increment near %g s." % target_dt)
         # human dt
         best_diff = None
         best_dt = 0.0
@@ -706,10 +700,9 @@ class ScopePanel(wx.Panel):
                 break
         if best_dt_text is None and best_dt is not None:
             best_dt_text = "%g" % best_dt
-        print("Best dt was %s" % best_dt_text)
+        # print("Best dt was %s" % best_dt_text)
         self.best_dt = best_dt
         self.best_dt_text = best_dt_text
-        print(possibles)
 
     def event_paint(self, _event):
         """Handle the EVT_PAINT event."""
