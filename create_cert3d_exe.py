@@ -4,8 +4,6 @@ This file creates a pyinstaller EXE file.
 """
 
 import os
-import shutil
-import datetime
 
 ####################
 # START OF OPTIONS #
@@ -29,9 +27,6 @@ arguments = [
     "--clean",
     "--noconsole",
     "--onefile",
-#    "-i scterm.ico",
-#    "--add-data scterm.ico;.",
-#    "--add-data sct_logo.png;.",
     "cert3d.py",
 ]
 os.system(" ".join(arguments))

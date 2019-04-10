@@ -11,6 +11,18 @@ import wx
 from BilevelData import BilevelData
 from PlotData import PlotData
 
+# possible colors for signals
+all_signal_colors = [
+    ("Red", wx.RED),
+    ("Orange", wx.Colour(255, 127, 0)),
+    ("Yellow", wx.YELLOW),
+    ("Green", wx.GREEN),
+    ("Cyan", wx.CYAN),
+    ("Blue", wx.BLUE),
+    ("Magenta", wx.Colour(255, 0, 255)),
+    ("White", wx.WHITE),
+]
+
 
 def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
     """Given the STEP and DIR channels, return position."""
@@ -50,17 +62,24 @@ class ScopePanel(wx.Panel):
     def __init__(self, parent, id_, position, size, style):
         print("Initializing!")
         super().__init__(parent, id_, position, size, style)
+
+        # create popup menu for signal style
+        self.style_popup_menu = self.create_style_menu()
+        # create the context popup handler
+        self.Bind(wx.EVT_MENU, self.event_popup_menu_item_selected)
+        self.Bind(wx.EVT_CONTEXT_MENU, self.event_show_popup)
+
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
-        self.SetFont(
-            wx.Font(
-                9,
-                wx.FONTFAMILY_MODERN,
-                wx.FONTSTYLE_NORMAL,
-                wx.FONTWEIGHT_BOLD,
-                False,
-                "Consolas",
-            )
-        )
+        # self.SetFont(
+        #    wx.Font(
+        #        9,
+        #        wx.FONTFAMILY_MODERN,
+        #        wx.FONTSTYLE_NORMAL,
+        #        wx.FONTWEIGHT_BOLD,
+        #        False,
+        #        "Consolas",
+        #    )
+        # )
         # list of channels
         self.channels = []
         # index of selected channel, or None
@@ -81,6 +100,8 @@ class ScopePanel(wx.Panel):
         self.channel_separator_thickness = 3
         # margin in pixels all around
         self.margin = 5
+        # spacing between signals
+        self.signal_spacing = 5
         # padding around timestamp label
         self.padding_timestamp_label = 2
         # length of channel
@@ -92,6 +113,8 @@ class ScopePanel(wx.Panel):
         # mouse panning memory
         self.panning = False
         self.panning_start = 0
+        # holds the (channel_index, signal_index) for a style menu popup
+        self.signal_to_style = None
         # true when we're selecting a time delta
         self.selecting_time = False
         # maximum distance in pixels to snap to a time value
@@ -100,19 +123,24 @@ class ScopePanel(wx.Panel):
         self.best_dt = None
         # name of the dt (e.g. "10 ns")
         self.best_dt_text = None
-        # font for labels
-        self.font_label = wx.Font(
+        # font for signal lables
+        self.font_signal_name = wx.Font(
             9,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
             wx.FONTWEIGHT_NORMAL,
             False,
-            "Consolas",
+            "Calibri",
         )
-
+        # get height of signal names in pixels
+        dc = wx.ClientDC(self)
+        dc.SetFont(self.font_signal_name)
+        # height of a signal name in pixels
+        self.signal_name_height = dc.GetFullTextExtent("X")[1]
+        print("Signal name height is", self.signal_name_height)
         # font for timestamps
         self.font_timestamp = wx.Font(
-            10,
+            9,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
             wx.FONTWEIGHT_BOLD,
@@ -134,8 +162,8 @@ class ScopePanel(wx.Panel):
 
         self.Bind(wx.EVT_LEFT_DOWN, self.event_mouse_left_button_down)
         self.Bind(wx.EVT_LEFT_UP, self.event_mouse_left_button_up)
-        self.Bind(wx.EVT_RIGHT_DOWN, self.event_mouse_right_button_down)
-        self.Bind(wx.EVT_RIGHT_UP, self.event_mouse_right_button_up)
+        self.Bind(wx.EVT_MIDDLE_DOWN, self.event_mouse_middle_button_down)
+        self.Bind(wx.EVT_MIDDLE_UP, self.event_mouse_middle_button_up)
         self.Bind(wx.EVT_MOTION, self.event_mouse_motion)
 
         # self.Bind(wx.EVT_ENTER_WINDOW, self.asdf)
@@ -144,6 +172,22 @@ class ScopePanel(wx.Panel):
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
         self.zoom_to_all()
+
+    def create_style_menu(self):
+        """Create and return a wx.Menu for the signal style popup."""
+        menu = wx.Menu()
+        # add colors
+        # item = menu.Append(-1, "Color")
+        submenu = wx.Menu()
+        for (name, color) in all_signal_colors:
+            item = submenu.AppendRadioItem(-1, name)
+        menu.AppendSubMenu(submenu, "&Color")
+        # add thickness submenu
+        submenu = wx.Menu()
+        for i in range(1, 6):
+            item = submenu.AppendRadioItem(-1, str(i))
+        menu.AppendSubMenu(submenu, "&Thickness")
+        return menu
 
     def add_channel(self, channel):
         """Add a new channel."""
@@ -158,6 +202,30 @@ class ScopePanel(wx.Panel):
                 return None
             if y1 <= y <= y2:
                 return i
+        # return None if we're past the end of the data
+        return None
+
+    def get_signal_from_y(self, y):
+        """Return the channel and signal index from the y pixel, or None."""
+        channel_index = self.get_channel_from_y(y)
+        if channel_index is None:
+            return None
+        # search through signals in this channel
+        signal_count = len(self.channels[channel_index].signals)
+        y1, y2 = self.get_channel_y_values(channel_index)
+        # get y value of middle of channel
+        y_mid = (y1 + y2) // 2
+        # get y value of first signal
+        name_height = (
+            signal_count * self.signal_name_height
+            + (signal_count - 1) * self.signal_spacing
+        )
+        y_top = y_mid - name_height // 2
+        for signal_index in range(signal_count):
+            if signal_index > 0:
+                y_top += self.signal_spacing + self.signal_name_height
+            if y_top <= y < y_top + self.signal_name_height:
+                return channel_index, signal_index
         # return None if we're past the end of the data
         return None
 
@@ -241,11 +309,11 @@ class ScopePanel(wx.Panel):
 
     def event_leave_window(self, event):
         if self.panning:
-            self.event_mouse_right_button_up(event)
+            self.event_mouse_middle_button_up(event)
         if self.dragging_channel:
             self.event_mouse_left_button_up(event)
 
-    def event_mouse_right_button_down(self, event):
+    def event_mouse_middle_button_down(self, event):
         # print('right button down')
         x = event.GetPosition()[0]
         if x >= self.margin + self.channel_length + self.padding2:
@@ -253,7 +321,7 @@ class ScopePanel(wx.Panel):
             self.panning = True
             self.SetCursor(wx.Cursor(wx.CURSOR_SIZEWE))
 
-    def event_mouse_right_button_up(self, _event):
+    def event_mouse_middle_button_up(self, _event):
         # print('right button up')
         if self.panning:
             self.SetCursor(wx.Cursor(wx.CURSOR_DEFAULT))
@@ -575,6 +643,8 @@ class ScopePanel(wx.Panel):
         # get top pixel for next channel
         top = 0
         timings = []
+        # set font for channel name
+        dc.SetFont(self.font_signal_name)
         for i, channel in enumerate(self.channels):
             timings.append(time.perf_counter())
             # if not the first channel, draw the separator
@@ -607,7 +677,7 @@ class ScopePanel(wx.Panel):
                 name = signal.name
                 # get x,y of middle center
                 rect = self.GetFullTextExtent(name)
-                x = self.margin + self.channel_length
+                x = self.signal_spacing + self.channel_length
                 # adjust for multiple signals per channel
                 y = y_mid - rect[1] // 2
                 y -= (signal_count - 1) * ((rect[1] + 5) // 2)
@@ -713,3 +783,42 @@ class ScopePanel(wx.Panel):
                 dc.DrawRectangle(x, y + height - thickness, width, thickness)
                 dc.DrawRectangle(x, y, thickness, height)
                 dc.DrawRectangle(x + width - thickness, y, thickness, height)
+
+    def event_show_popup(self, event):
+        x, y = self.ScreenToClient(event.GetPosition())
+        # if we're in a signal name, show the popup for signal styles
+        if x < self.margin + self.channel_length:
+            result = self.get_signal_from_y(y)
+            if result:
+                self.signal_to_style = result
+                channel_index, signal_index = result
+                signal = self.channels[channel_index].signals[signal_index]
+                # select correct radio box for thickness
+                id_ = self.style_popup_menu.FindItem(str(signal.thickness))
+                self.style_popup_menu.FindItemById(id_).Check()
+                # select correct radio box for color
+                color_name = next(
+                    x for x, y in all_signal_colors if y == signal.color
+                )
+                id_ = self.style_popup_menu.FindItem(color_name)
+                self.style_popup_menu.FindItemById(id_).Check()
+                # popup the style submenu
+                self.PopupMenu(self.style_popup_menu, (x, y))
+        # only show
+        # popup style menu if we're within a signal name
+
+    def event_popup_menu_item_selected(self, event):
+        # alias the signal to modify
+        channel_index, signal_index = self.signal_to_style
+        signal = self.channels[channel_index].signals[signal_index]
+        # get the text of the menu item selected
+        item = self.style_popup_menu.FindItemById(event.GetId())
+        text = item.GetText()
+        # if it's numeric, change the thickness, else change the color
+        if text.isdigit():
+            signal.thickness = int(text)
+        else:
+            color = next(y for x, y in all_signal_colors if x == text)
+            signal.color = color
+        # redraw the screen
+        self.Refresh()
