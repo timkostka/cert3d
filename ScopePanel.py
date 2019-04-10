@@ -184,7 +184,7 @@ class ScopePanel(wx.Panel):
         image.InitAlpha()
         for x in range(image.GetWidth()):
             for y in range(image.GetHeight()):
-                if (x + y) % 4 < 2:
+                if (2 * x + y) % 16 < 8:
                     image.SetAlpha(x, y, wx.ALPHA_TRANSPARENT)
                 else:
                     image.SetRGB(x, y, color.Red(), color.Green(), color.Blue())
@@ -539,25 +539,21 @@ class ScopePanel(wx.Panel):
         right_index = data.find_closest_index(self.start_time + (right - left + 1) * self.seconds_per_pixel)
         # if there are more than 1 edge per pixel, just draw a grayed out signal
         if right_index - index > (right - left) * 0.5:
-            #fg = signal.color.GetRGB()
-            #bg = self.GetBackgroundColour().GetRGB()
-            #print("fg=%s, bg=%s" % (fg, bg))
-            #color = wx.Colour.AlphaBlend(fg, bg, 255)
-            #print("fg=%s, bg=%s, col=%s" % (fg, bg, color))
-            #print(color)
-            #color = signal.color
+            # clip rectangle to data region
+            left_2 = self.get_x_from_time(signal.data.get_time_at_index(0))
+            right_2 = self.get_x_from_time(signal.data.get_time_at_index(-1))
+            left = max(left, left_2)
+            right = min(right, right_2)
+            # set pen and brush to stipple pattern
             pen = wx.Pen(signal.color, 1)
             brush = wx.Brush(signal.color)
-            bmp = self.create_stipple_bitmap(signal.color) #wx.Bitmap('stipple_crosshatch.png')
+            bmp = self.create_stipple_bitmap(signal.color)
             brush.SetStipple(bmp)
-            #pen.SetStipple(bmp)
+            pen.SetStipple(bmp)
             dc.SetPen(pen)
             dc.SetBrush(brush)
-            rect[0] -= 1
-            rect[1] -= 1
-            rect[2] += 2
-            rect[3] += 2
-            dc.DrawRectangle(rect)
+            # draw the rectangle
+            dc.DrawRectangle(left, y1, right - left + 1, y2 - y1 + 1)
             dc.DestroyClippingRegion()
             return
         if index:
