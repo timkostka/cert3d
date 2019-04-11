@@ -50,6 +50,8 @@ class AnalysisWindow(AnalysisWindowBase):
         self.SetSize(window_size)
         self.Centre()
 
+        # adjust signal name width
+        self.scope_panel.adjust_channel_name_size()
         # zoom to all
         self.scope_panel.zoom_to_all() #0.5, 0.50001)
 

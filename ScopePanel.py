@@ -5,8 +5,9 @@ This implements a custom wx control to view .
 
 import time
 import math
-
 import wx
+
+from dpi import asize
 
 from BilevelData import BilevelData
 from PlotData import PlotData
@@ -76,25 +77,25 @@ class ScopePanel(wx.Panel):
         # (channel_index, y_value) used during rearranging channels
         self.dragging_channel = None
         # width of the snaptime display
-        self.snaptime_frame_thickness = 3
+        self.snaptime_frame_thickness = asize(1)
         # color of snaptime display
         self.snaptime_frame_color = wx.YELLOW
         # color of snaptime text
         self.snaptime_text_color = wx.WHITE
-        # padding between channels
-        self.padding = 9
         # padding between name and channel data
-        self.padding2 = 5
+        self.padding2 = asize(2)
         # thickness in pixels of channel separator bar
-        self.channel_separator_thickness = 3
+        self.channel_separator_thickness = 1
+        # padding between channels
+        self.padding = 2 * asize(2) + self.channel_separator_thickness
         # margin in pixels all around
-        self.margin = 5
+        self.margin = asize(2)
         # spacing between signals
-        self.signal_spacing = 5
+        self.signal_spacing = asize(2)
         # padding around timestamp label
-        self.padding_timestamp_label = 2
+        self.padding_timestamp_label = asize(1)
         # length of channel
-        self.channel_length = 150
+        self.channel_length = asize(120)
         # leftmost time
         self.start_time = 0.0
         # seconds per pixel
@@ -107,19 +108,19 @@ class ScopePanel(wx.Panel):
         # true when we're selecting a time delta
         self.selecting_time = False
         # maximum distance in pixels to snap to a time value
-        self.snap_distance = 20
+        self.snap_distance = asize(10)
         # delta time unit for horizontal axis (e.g. 10e-9)
         self.best_dt = None
         # name of the dt (e.g. "10 ns")
         self.best_dt_text = None
         # font for signal lables
         self.font_signal_name = wx.Font(
-            12,
+            9,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
             wx.FONTWEIGHT_BOLD,
             False,
-            "Calibri",
+            "Consolas",
         )
         # get height of signal names in pixels
         dc = wx.ClientDC(self)
@@ -129,12 +130,12 @@ class ScopePanel(wx.Panel):
         # print("Signal name height is", self.signal_name_height)
         # font for timestamps
         self.font_timestamp = wx.Font(
-            12,
+            9,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
             wx.FONTWEIGHT_BOLD,
             False,
-            "Calibri",
+            "Consolas",
         )
         # margin for snaptime label
         self.snaptime_margin = [1, 0]
@@ -162,7 +163,21 @@ class ScopePanel(wx.Panel):
 
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
+        self.adjust_channel_name_size()
+
         self.zoom_to_all()
+
+    def adjust_channel_name_size(self):
+        """Find ideal value for self.channel_length."""
+        max_length = 0
+        dc = wx.ClientDC(self)
+        dc.SetFont(self.font_signal_name)
+        for channel in self.channels:
+            for signal in channel.signals:
+                rect = dc.GetFullTextExtent(signal.name)
+                max_length = max(max_length, rect[0])
+        if max_length > 0:
+            self.channel_length = max_length + asize(5)
 
     def create_stipple_bitmap(self, color):
         """Return the stipple bitmap for the given color."""
@@ -731,9 +746,11 @@ class ScopePanel(wx.Panel):
             if i == 0:
                 top += self.margin
             else:
-                y0 = top + self.padding // 2
+                thickness = self.channel_separator_thickness
+                y0 = top + self.padding // 2 - thickness // 2
                 dc.SetPen(wx.Pen(wx.LIGHT_GREY, 1))
-                dc.DrawRectangle(0, y0, right + 1, 1)
+                dc.SetBrush(wx.LIGHT_GREY_BRUSH)
+                dc.DrawRectangle(0, y0, right + 1, thickness)
                 top += self.padding
             # get top (y1) and bottom (y2) of display
             y1 = top
