@@ -26,6 +26,7 @@ def set_dpi_aware():
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     else:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    get_system_dpi()
 
 
 def asize(size):
@@ -35,10 +36,3 @@ def asize(size):
     if isinstance(size, int) or isinstance(size, float):
         return round(size * system_dpi / default_system_dpi + 0.5)
     return [asize(x) for x in size]
-    #if isinstance(size, wx.Size):
-    #    return wx.Size(adjusted_size(size[0]), adjusted_size(size[1]))
-    #raise ValueError
-
-
-set_dpi_aware()
-get_system_dpi()

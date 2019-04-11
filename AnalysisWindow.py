@@ -2,6 +2,8 @@ import random
 
 import wx
 
+from dpi import asize
+
 from AnalysisWindowBase import AnalysisWindowBase
 from BilevelData import BilevelData
 from ScopeChannel import ScopeChannel
@@ -9,6 +11,7 @@ from ScopeChannel import Signal
 from PlotData import PlotData
 
 all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
+
 
 class AnalysisWindow(AnalysisWindowBase):
 
@@ -20,7 +23,7 @@ class AnalysisWindow(AnalysisWindowBase):
                      'Z_STEP', 'Z_DIR', 'E_STEP', 'E_DIR']:
             data = BilevelData()
             channel = ScopeChannel(data)
-            channel.height = random.randint(20, 20)
+            channel.height = random.randint(asize(12), asize(12))
             channel.signals[-1].name = name
             channel.signals[-1].color = wx.GREEN  # random.choice(all_colors)
             channel.signals[-1].thickness = random.randint(1, 1)
@@ -32,7 +35,7 @@ class AnalysisWindow(AnalysisWindowBase):
             channel.signals[-1].name = name
             channel.signals[-1].color = wx.RED # random.choice(all_colors)
             channel.signals[-1].thickness = random.randint(1, 1)
-            channel.height = random.randint(120, 120)
+            channel.height = random.randint(asize(80), asize(80))
             data2 = PlotData()
             signal2 = Signal(data2)
             signal2.name = name + '2'
