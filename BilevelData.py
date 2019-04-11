@@ -15,7 +15,7 @@ class BilevelData:
         self.start_high = False
         # time of each edge in ticks
         self.data = []
-        self.invent_data(100000)  # DEBUG
+        self.invent_data(10000)  # DEBUG
 
     def get_length(self):
         """Return the length of the data in seconds, or None."""

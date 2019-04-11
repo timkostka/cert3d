@@ -27,7 +27,7 @@ class PlotData:
         self.start_time = 0.0
         phi = random.uniform(0.0, math.tau)
         period = random.uniform(20, 40)
-        for i in range(200):
+        for i in range(12000):
             self.data.append((5 * i, math.sin(phi + i * math.tau / period)))
 
     def get_closest_time(self, target_time):

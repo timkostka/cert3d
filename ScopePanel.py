@@ -114,10 +114,10 @@ class ScopePanel(wx.Panel):
         self.best_dt_text = None
         # font for signal lables
         self.font_signal_name = wx.Font(
-            9,
+            12,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
-            wx.FONTWEIGHT_NORMAL,
+            wx.FONTWEIGHT_BOLD,
             False,
             "Calibri",
         )
@@ -129,7 +129,7 @@ class ScopePanel(wx.Panel):
         # print("Signal name height is", self.signal_name_height)
         # font for timestamps
         self.font_timestamp = wx.Font(
-            9,
+            12,
             wx.FONTFAMILY_MODERN,
             wx.FONTSTYLE_NORMAL,
             wx.FONTWEIGHT_BOLD,
@@ -137,7 +137,7 @@ class ScopePanel(wx.Panel):
             "Calibri",
         )
         # margin for snaptime label
-        self.snaptime_margin = [3, -4]
+        self.snaptime_margin = [1, 0]
         # either None or (channel_index, signal_index, time)
         self.snaptime_start = None
         self.snaptime_end = None
@@ -191,12 +191,12 @@ class ScopePanel(wx.Panel):
         # item = menu.Append(-1, "Color")
         submenu = wx.Menu()
         for (name, color) in all_signal_colors:
-            item = submenu.AppendRadioItem(-1, name)
+            submenu.AppendRadioItem(-1, name)
         menu.AppendSubMenu(submenu, "&Color")
         # add thickness submenu
         submenu = wx.Menu()
         for i in range(1, 6):
-            item = submenu.AppendRadioItem(-1, str(i))
+            submenu.AppendRadioItem(-1, str(i))
         menu.AppendSubMenu(submenu, "&Thickness")
         return menu
 
@@ -756,7 +756,7 @@ class ScopePanel(wx.Panel):
                 dc.SetTextForeground(signal.color)
                 name = signal.name
                 # get x,y of middle center
-                rect = self.GetFullTextExtent(name)
+                rect = dc.GetFullTextExtent(name)
                 x = self.signal_spacing + self.channel_length
                 # adjust for multiple signals per channel
                 y = y_mid - rect[1] // 2
