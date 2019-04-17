@@ -35,3 +35,79 @@ The width of the channel name display shall be fixed to the minimum possible siz
 ### ScopeChannel.py
 
 This should hold aethestic information about the channel (color, height, scaling).  It will also do the drawing.
+
+
+### Commands
+
+The C3D board can be sent commands over USB.  The following are implemented:
+
+* `start`
+  * Begin streaming over the USB port.
+* `stop`
+  * Stop streaming data.
+* `info`
+  * Send the configuration packet over the USB port.  Streaming must be disabled.
+
+#### Info packet
+
+The information packet contains information on how to interpret data coming 
+ over the USB.  Note that some configuration is done over the USB.
+
+* `char[9] start_string`
+  * The string `InfoStart` to denote the start of this packet.
+* `uint32_t clock`
+  * System clock speed.
+* `uint8_t signal_channel_count`
+  * Number of signal channels in the packet.
+* `uint8_t adc_channel_count`
+  * Number of ADC channels in the packet.
+* For each signal channel:
+  * `uint32_t clock`
+    * Clock speed in Hz of this channel.
+* For each ADC signal:
+  * `float zero_value`
+    * Voltage value corresponding to a zero count value on the channel.
+  * `float high_value`
+    * Voltage value corresponding to a max count (4095) on this channel.
+* `char[8] end_string`
+  * The string `InfoStop` to denote the start of this packet.
+
+### TriStateData
+
+I added a third signal type: `TriStateData`.  This is similar to the bilevel data, except it has a third state.  The third state will be high-z and will display as grayed out over the entire range.  The idea is to use this to simplify bilevel data with millions of points for zoomed out views.
+
+#### Simplifying data
+
+I expect to have massive data sets.  If a STEP channel for a motor triggers at ~100kHz, that is 200,000 data points per second.  One can see how this adds up.  Drawing all data set points would be prohibitve.
+
+To simplify bilevel data, we can approximate it using a  
+
+I also expect channels to be dormant for long periods of time.  In a zoomed out view, it would be nice to be able to see period of inactivity and activity.
+
+Data sets will be simplified by augmenting the data set with one or more simplified sets.  These sets will have less points than the original and will be used when the data set is zoomed out.
+
+##### How to simplify the data set?
+
+Zoom value is a ticks/pixel value.
+
+1. Look at the original data set.  If it has less than X (maybe 1000?) edges, do not simplify.  Else, continue.
+
+2. Find the level of zoom at which we have no more than X (maybe 1000) edges per X (maybe asize(2000)?) pixels.  This is our maximum zoom.
+
+3. Find the level of zoom to fit the entire data set within X (maybe asize(2000)?) pixels.  This is our minimum zoom.
+
+4. Add zoom levels between min and max such that the zoom value jumps by no more than a factor of X (maybe 2.0)?
+
+At this point, we have all zoom levels we need to create, with the most zoomed in level equal to the original data set.
+
+Better idea:
+
+1. Find the maximum zoom level as in (2) above.  Then, create a list of edge durations and sort it.  Collapse each duration less than double the median edge duration.  Calculate level of zoom for this new data set, and repeat until we have under 1000 edges in the set.  This should only repeat a few times.
+
+The problem with this is the "collapse a duration."  Collapsing a single duration doesn't actuall achieve anything except reduce quality of the data set.  We need to collapse two durations to reduce the number of edges.  With that in mind, here is an improved algorithm:
+
+1. Find the maximum zoom level as in (2) above.
+
+2. Create a list of double edge durations (i.e. the duration between edge 0 and edge 2, edge 1 and edge, 3, edge 2 and edge 4, etc...).  Take twice the median of this list.  Collapse all durations which are less than this value.
+
+3. Note that collapsing a duration means setting the value from 0 or 1 to 2, and combining adjacent durations of value 2.

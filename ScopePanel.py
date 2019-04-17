@@ -9,7 +9,7 @@ import wx
 
 from dpi import asize
 
-from BilevelData import BilevelData
+from BilevelData import BilevelData, TriStateData
 from PlotData import PlotData
 
 # possible colors for signals
@@ -135,7 +135,7 @@ class ScopePanel(wx.Panel):
             wx.FONTSTYLE_NORMAL,
             wx.FONTWEIGHT_BOLD,
             False,
-            "Consolas",
+            "Calibri",
         )
         # margin for snaptime label
         self.snaptime_margin = [1, 0]
@@ -354,7 +354,16 @@ class ScopePanel(wx.Panel):
             self.panning = False
 
     def event_mouse_motion(self, event):
-        # print('mouse motion')
+        # XOR current position
+        # DEBUG
+        if False:
+            dc = wx.ClientDC(self)
+            # set drawing mode to invert color
+            dc.SetLogicalFunction(wx.INVERT)
+            dc.SetPen(wx.WHITE_PEN)
+            dc.SetBrush(wx.WHITE_BRUSH)
+            dc.DrawRectangle(50, 50, 200, 100)
+            del dc
         if self.panning:
             dx = event.GetPosition()[0] - self.panning_start
             # if no net motion, just return
@@ -491,23 +500,23 @@ class ScopePanel(wx.Panel):
         if abstime < 10e-9:
             return "%.2f ns" % (time_s * 1e9)
         elif abstime < 100e-9:
-            return "%.1fns" % (time_s * 1e9)
-        elif abstime < 1000e9:
-            return "%.0fns" % (time_s * 1e9)
-        elif abstime < 10e6:
-            return "%.2fus" % (time_s * 1e9)
-        elif abstime < 100e6:
-            return "%.1fus" % (time_s * 1e9)
-        elif abstime < 1000e6:
-            return "%.0fus" % (time_s * 1e9)
-        elif abstime < 10e3:
-            return "%.2fms" % (time_s * 1e9)
-        elif abstime < 100e3:
-            return "%.1fms" % (time_s * 1e9)
-        elif abstime < 1000e3:
-            return "%.0fms" % (time_s * 1e9)
+            return "%.1f ns" % (time_s * 1e9)
+        elif abstime < 1000e-9:
+            return "%.0f ns" % (time_s * 1e9)
+        elif abstime < 10e-6:
+            return "%.2f us" % (time_s * 1e6)
+        elif abstime < 100e-6:
+            return "%.1f us" % (time_s * 1e6)
+        elif abstime < 1000e-6:
+            return "%.0f us" % (time_s * 1e6)
+        elif abstime < 10e-3:
+            return "%.2f ms" % (time_s * 1e3)
+        elif abstime < 100e-3:
+            return "%.1f ms" % (time_s * 1e3)
+        elif abstime < 1000e-3:
+            return "%.0f ms" % (time_s * 1e3)
         else:
-            return "%gs" % time_s
+            return "%g s" % time_s
 
     def draw_bileveldata_channel(self, dc, rect, channel, signal):
         """Draw a channel of type BilevelData to the given rectangular region"""
@@ -570,6 +579,7 @@ class ScopePanel(wx.Panel):
             signal_low = not signal_low
         time = data.start_time + data.data[index] * data.seconds_per_tick
         x2 = left + round((time - self.start_time) / self.seconds_per_pixel)
+        data_length = len(data.data)
         while True:
             x1 = x2
             # if we're past the viewing window, we're done
@@ -577,7 +587,7 @@ class ScopePanel(wx.Panel):
                 break
             # if not the first point, draw the vertical line
             # if i2 > 0: # and left <= x1 <= right:
-            if index > 0:
+            if index > 0 and index < data_length - 1:
                 dc.DrawRectangle(x1, y1, thickness, height)
             # go to the next value
             index += 1
@@ -597,32 +607,92 @@ class ScopePanel(wx.Panel):
                 y = y2 - thickness + 1 if signal_low else y1
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
-        return
-        # while index < len(data.data):
-        #    pass
 
-        # number of ticks for current data point
-        ticks = 0
-        for i2, length in enumerate(data.data):
-            x1 = int(channel_left + ticks * pixels_per_tick + 0.5)
+    def draw_tristatedata_channel(self, dc, rect, channel, signal):
+        """Draw a channel of type BilevelData to the given rectangular region"""
+        # create solid brush
+        solid_pen = wx.Pen(signal.color, 1)
+        solid_brush = wx.Brush(signal.color)
+
+        gray_color = wx.Colour((signal.color.Red() + 1) // 3,
+                               (signal.color.Green() + 1) // 3,
+                               (signal.color.Blue() + 1) // 3)
+        gray_pen = wx.Pen(signal.color, 1)
+        gray_brush = wx.Brush(gray_color)
+        bmp = self.create_stipple_bitmap(gray_color)
+        #gray_pen.SetStipple(bmp)
+        gray_brush.SetStipple(bmp)
+
+        # clip to the specified region
+        dc.SetClippingRegion(*rect)
+        # alias the underlying data type
+        data = signal.data
+        # get pixels per tick
+        pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
+        # find x pixel of start of channel data
+        channel_left = (
+            rect[0]
+            + (data.start_time - self.start_time) / self.seconds_per_pixel
+        )
+        # adjust for thickness of line
+        channel_left -= (signal.thickness - 1) / 2.0
+        # alias some things to shorter names
+        y1 = rect[1]
+        y2 = y1 + rect[3] - 1
+        height = y2 - y1 + 1
+        thickness = signal.thickness
+        left = rect[0]
+        right = rect[0] + rect[2] - 1
+        # find first index within window
+        index = data.find_index_after(self.start_time)
+        # if we're outside the data window, there is nothing to draw
+        if index is None:
+            dc.DestroyClippingRegion()
+            return
+        # find first index after window
+        right_index = data.find_closest_index(
+            self.start_time + (right - left + 1) * self.seconds_per_pixel
+        )
+        if index:
+            index -= 1
+        time = data.get_time_at_index(index)
+        x2 = left + round((time - self.start_time) / self.seconds_per_pixel)
+        data_length = len(data.data)
+        while True:
+            x1 = x2
             # if we're past the viewing window, we're done
             if x1 > right:
                 break
             # if not the first point, draw the vertical line
             # if i2 > 0: # and left <= x1 <= right:
-            if i2 > 0 and left <= x1 <= right:
+            if index > 0 and index < data_length - 1:
                 dc.DrawRectangle(x1, y1, thickness, height)
-            # flip signal polarity
-            signal_low = not signal_low
-            ticks += length
-            x2 = int(channel_left + ticks * pixels_per_tick + 0.5)
+            # go to the next value
+            index += 1
+            if index >= len(data.data):
+                break
+            time = data.get_time_at_index(index)
+            value = data.data[index][1]
+            # ticks += length
+            x2 = left + round(
+                (time - self.start_time) / self.seconds_per_pixel
+            )
             # if in range, draw the edge
             # if False and (x2 < left or x1 > right):
             #    pass
             # else:
-            if x1 <= right and x2 >= left:
-                y = y2 - thickness + 1 if signal_low else y1
+            if x1 > right or x2 < left:
+                continue
+            # if it's a high or low edge, draw it
+            if value == 0 or value == 1:
+                dc.SetPen(solid_pen)
+                dc.SetBrush(solid_brush)
+                y = y2 - thickness + 1 if value == 0 else y1
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
+            else:
+                dc.SetPen(gray_pen)
+                dc.SetBrush(gray_brush)
+                dc.DrawRectangle(x1, y1, x2 - x1 + thickness, y2 - y1 + 1)
         dc.DestroyClippingRegion()
 
     def draw_plotdata_channel(self, dc, rect, channel, signal):
@@ -723,6 +793,9 @@ class ScopePanel(wx.Panel):
         """Handle the EVT_PAINT event."""
         self.find_dt()
         dc = wx.AutoBufferedPaintDC(self)
+        # set drawing mode to overwrite
+        dc.SetLogicalFunction(wx.COPY)
+        # clear panel and fill with background color
         dc.Clear()
         # get leftmost pixel we can draw for scope view
         left = self.margin + self.channel_length + self.padding2
@@ -786,21 +859,24 @@ class ScopePanel(wx.Panel):
                     self.draw_bileveldata_channel(dc, rect, channel, signal)
                 elif isinstance(signal.data, PlotData):
                     self.draw_plotdata_channel(dc, rect, channel, signal)
+                elif isinstance(signal.data, TriStateData):
+                    self.draw_tristatedata_channel(dc, rect, channel, signal)
                 else:
                     print("ERROR: unknown data type")
             top += channel.height
         timings.append(time.perf_counter())
         # output timing information
-        print(
-            "Timings: %s"
-            % "/".join(
-                "%.3g" % (1000 * x)
-                for x in [
-                    (timings[i + 1] - timings[i])
-                    for i in range(len(self.channels))
-                ]
+        if False:
+            print(
+                "Timings: %s"
+                % "/".join(
+                    "%.3g" % (1000 * x)
+                    for x in [
+                        (timings[i + 1] - timings[i])
+                        for i in range(len(self.channels))
+                    ]
+                )
             )
-        )
         # draw snap time
         if self.snaptime_start:
             # set clipping region to right half

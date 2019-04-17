@@ -199,11 +199,42 @@ The computer can also detect missed packets (if any) since the packet number is 
 
 If no edges are detected, each packet is `2 + 2 + 8 * 2 = 20` bytes.  At a packet rate of 5kHz, this comes to 0.8 Mbps.  That's a bit much for purely overhead.
 
+#### Output processing try #3
+
+The primary of the #2 methos is that 0.8 Mbps is a lot for overhead.  We'll try to reduce that.  We also will reduce the amount we send the sync word since the connection shouldn't be lossy.
+
+* (Only if packet number % 8 == 0) Sync word `0x77`
+
+* Packet number as `uint8_t`, first is 0, increments 1 each time, eventually flows over.
+
+* Single `uint8_t` value with mask showing which signal channels are present in this channel
+  * If LSB (bit 0) is set, then channel 0 is present
+  * If bit 1 is set, channel 1 is present
+  * Etc...
+
+* For each signal channel which is present (per the mask above)
+
+  * Number of entries for this channel as a `uint8_t`
+  
+    * Note that we shouldn't need more than this per packet since `5kHz * 255 = 1.3 MHz`.  Channels shouldn't trigger that often.
+  
+  * (uint16_t) Entry #1
+  
+  * (uint16_t) Entry #2
+  
+  * etc...
+
+* (uint8_t) Number of ADC samples present (typically 0 or 1)
+
+* ADC samples as 14 packed 12-bit values (21 bytes per value)
+
+Assuming no activity on the signal channels, and no ADC samples, this packet will be 3.125 bytes on average, which is 0.125 Mbps.  Much better.
+
 ### ADC triggering
 
 We should also set up the ADC to trigger off a timer in order to keep relative timing correct, although the rate of ADC triggers should be pretty slow in order to keep bandwidth reasonable.
 
-I did this.  The ADC triggers off of `TIM2_TRGO` signal.  Maybe I should move it somewhere else so I can independently adjust the frequency of samples?  The only options for the are TIM1, TIM2, TIM3, and TIM8.  I'm keeping TIM1 and TIM8 for their high speed edge detection, so TIM2 will have to trigger the ADCs.  And rev1 hardware has TIM3 reserved as well.  So I'm stuck with TIM2.  Can I get the other three to trigger off of a different timer?  Yes, they can all be triggered off of TIM4.
+I did this.  The ADC triggers off of `TIM2_TRGO` signal.  Maybe I should move it somewhere else so I can independently adjust the frequency of samples?  The only options for the are TIM1, TIM2, TIM3, and TIM8.  I'm keeping TIM1 and TIM8 for their high speed edge detection, so TIM2 will have to trigger the ADCs.  And rev1 hardware has TIM3 reserved as well.  So I'm stuck with TIM2.  Can I get the other three to trigger off of a different timer?  Yes, they can all be triggered off of TIM4.  I did this.
 
 ### ADC sampling
 
@@ -232,7 +263,6 @@ There are a number of items we need to monitor for on/off.  Off, they should be 
 If I expect voltages up to around 24V, the following circuit works well:
 
 ```
-
 <ADC PIN>---+---[7.5kOhm]---<PRINTER PIN>
             |
             +---[1.0kOhm]---<GND>
@@ -296,3 +326,54 @@ On the duet 2 wifi:
 ```
 
 In either case, we can simulate an endstop by using an open drain output and driving it to ground.  It needs to be protected from overvoltage.  A 100Ohm inline resistor would work fine, along with a diode clamp to the 3V3 rail.
+
+
+### Figuring out STM32 USB drivers
+
+After initializating, data is send via `CDC_Transmit_HS`.  This calls:
+
+* `CDC_Transmit_HS`
+  * `USBD_CDC_SetTxBuffer`
+  * `USBD_CDC_TransmitPacket`
+    * This checks for `TxState==0` else it returns busy.
+    * `USBD_LL_Transmit`
+      * `HAL_PCD_EP_Transmit`
+        * `USB_EP0StartXfer`
+        * `USB_EPStartXfer`
+
+The `TxState` flag gets reset within `USBD_CDC_DataIn`.  Which is the `DataIn` member of.  Which gets called via `USBD_LL_DataInStage`.  Which gets called via `HAL_PCD_DataInStageCallback`.  Which gets called via `HAL_PCD_IRQHandler`.  Which gets called via `OTG_HS_IRQHandler`.  Which is an interrupt in the IRQ table.
+
+To get better (?) throughput, it's possible I could add code to the end of `HAL_PCD_IRQHandler` to send out data if data is ready and `TxState==0`.  This may result in minimal downtime of the USB bus.
+
+#### Enabling DMA
+
+DMA is enabled by setting `hpcd_USB_OTG_HS.Init.dma_enable = DISABLE;`.  However, more is needed.  Likely, STM32CUBEMX will generate the necessary code.
+
+I was not able to get this working with v1.21 firmware.  Likely there is a bug.  I think I got it working with 1.24 firmware, but the rest of my library is not yet compatible with that.  For now, I'll just stick with non-DMA version.
+
+#### USB buffer
+
+There will be a large buffer allocated to the outgoing USB buffer which we will call the staging buffer.  This staging buffer will be split into 2048-byte chunks.  Note this is the largest buffer we can send at a time through USB.
+
+When we stage data, it will write to the current chunk.  If data flows over, then it will move to the next chunk, and so on.  If we ever move to the chunk that is currently being sent, this is an overflow condition.
+
+Within the main loop, if the USB is inactive, we shall send out the next chunk, if possible.  If this chunk is not yet full, we will disable new information from being added and instead make it added to the next chunk.
+
+We should have at least 50kB of buffer to devote to this.
+
+#### How does receiving data work?
+
+The `CDC_Receive_HS` function is called from within the IRQ handler.  Within this function, we call `USBD_CDC_SetRxBuffer` and `USBD_CDC_ReceivePacket` and then return `USBD_OK`.  If we don't call these function and instead just return `USBD_OK`, no more packets are received, as if the packet never gets registered as received.
+
+The `USBD_CDC_SetRxBuffer` function just sets a buffer pointer.  No magic there.
+
+The `USBD_CDC_ReceivePacket` calls the following:
+
+* `USBD_CDC_ReceivePacket`
+  * `USBD_LL_PrepareReceive`
+    * `HAL_PCD_EP_Receive`
+      * `USB_EP0StartXfer`
+      * `USB_EPStartXfer`
+        * `USBx_OUTEP(ep->num)->DOEPCTL |= (USB_OTG_DOEPCTL_CNAK | USB_OTG_DOEPCTL_EPENA);`
+
+This last line enables transfer on this endpoint.

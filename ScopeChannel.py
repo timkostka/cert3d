@@ -1,6 +1,6 @@
 import wx
 
-from BilevelData import BilevelData
+from BilevelData import BilevelData, TriStateData
 from PlotData import PlotData
 
 
@@ -8,7 +8,7 @@ class Signal:
 
     def __init__(self, data):
         # raw data
-        assert isinstance(data, BilevelData) or isinstance(data, PlotData)
+        assert isinstance(data, BilevelData) or isinstance(data, PlotData) or isinstance(data, TriStateData)
         # data set
         self.data = data
         # color of channel
