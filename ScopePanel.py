@@ -11,6 +11,12 @@ from dpi import asize
 
 from Data import *
 
+# maximum edges per screen
+max_points_per_screen = 500
+
+# screen size in pixels
+screen_size = asize(1000)
+
 # possible colors for signals
 all_signal_colors = [
     ("Red", wx.RED),
@@ -25,6 +31,8 @@ all_signal_colors = [
 
 
 class Signal:
+    """A Signal holds information about a scope signal."""
+
     def __init__(self, name=None, color=wx.GREEN, thickness=3, data=None):
         # raw data
         assert isinstance(data, Data)
@@ -34,13 +42,29 @@ class Signal:
         self.color = color
         # width of the channel plot in pixels
         self.thickness = thickness
-        # data cluster
-        self.data_cluster = [[0, data]]
-        # TODO: create simplified data from this data
         # active data set
         self.active_data = data
         # start time of the data
         self.start_time = data.start_time
+        # data cluster
+        self.data_cluster = [[0, data]]
+        # create simplified data sets
+        while data.get_point_count() > max_points_per_screen:
+            new_data = data.get_reduced_data()
+            self.data_cluster.append([0, new_data])
+            break
+        # find zoom levels for each set
+        for i in range(len(self.data_cluster)):
+            data = self.data_cluster[i][1]
+            min_seconds = data.get_min_period_with_point_count(max_points_per_screen)
+            min_pixels_per_second = screen_size / min_seconds
+            self.data_cluster[i][0] = min_pixels_per_second
+        # set min zoom level of most simplified set to 0
+        self.data_cluster[-1][0] = 0.0
+
+    def is_empty(self):
+        """Return True if the signal is empty."""
+        return bool(self.data_cluster)
 
     def set_active_data(self, pixels_per_second):
         """Set the active data based on the pixels_per_second value."""
@@ -226,7 +250,7 @@ class ScopePanel(wx.Panel):
             "E_DIR",
         ]:
             # create a random signal
-            if 'DIR' in name:
+            if 'DIR' in name and False:
                 data = TriStateData()
             else:
                 data = BilevelData()
@@ -534,8 +558,16 @@ class ScopePanel(wx.Panel):
 
     def update_signal_zoom(self):
         """Find the best data for the given zoom level."""
-        # TODO: implement this
-        return
+        for channel in self.channels:
+            for signal in channel.signals:
+                if signal.is_empty():
+                    signal.active_data = None
+                signal.active_data = None
+                for zoom, data in signal.data_cluster:
+                    if zoom < self.pixels_per_second:
+                        signal.active_data = data
+                        break
+                assert signal.active_data is not None
 
     def zoom_to_all(self):
         """Initialize the viewing window to see all data."""
@@ -557,6 +589,7 @@ class ScopePanel(wx.Panel):
             - self.padding2
             - self.channel_length
         )
+        panel_width = max(panel_width, asize(200))
         self.start_time = left
         self.pixels_per_second = 1.0
         if right != left:
