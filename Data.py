@@ -116,7 +116,7 @@ class Data:
         """Should return the time closest to the given time, or None."""
         raise NotImplementedError
 
-    def get_length(self, time):
+    def get_length(self):
         """Return the length of the data."""
         raise NotImplementedError
 
@@ -347,16 +347,6 @@ class BilevelData(Data):
         if index is None:
             return None
         return self.get_time_at_index(index)
-        if len(self.data) == 0:
-            return None
-        time = self.start_time
-        tick_count = 0
-        for ticks in self.data:
-            tick_count += ticks
-            this_time = self.start_time + tick_count * self.seconds_per_tick
-            if abs(this_time - target_time) < abs(time - target_time):
-                time = this_time
-        return time
 
     def draw_signal(
         self, dc, rect, color, thickness, left_time, pixels_per_second
@@ -367,17 +357,6 @@ class BilevelData(Data):
         dc.SetBrush(wx.Brush(color))
         # clip to the specified region
         dc.SetClippingRegion(*rect)
-        # alias the underlying data type
-        # edges = self.edges
-        # get pixels per tick
-        # pixels_per_tick = self.seconds_per_tick * pixels_per_second
-        # find x pixel of start of channel data
-        # channel_left = (
-        #    rect[0]
-        #    + (data.start_time - self.start_time) / self.seconds_per_pixel
-        # )
-        # adjust for thickness of line
-        # channel_left -= (signal.thickness - 1) / 2.0
         # true if signal is low
         # note we start on the opposite edge, since we flip it before drawing
         # the first plateau
@@ -393,35 +372,10 @@ class BilevelData(Data):
         index = self.find_index_after(left_time)
         if index > 0:
             index -= 1
-        # if we're outside the data window, there is nothing to draw
-        # if index is None:
-        #    dc.DestroyClippingRegion()
-        #    return
         # find first index to the right of the window
         right_index = self.find_index_after(
             left_time + width / pixels_per_second
         )
-        """
-        # if there are more than 1 edge per pixel, just draw a grayed out signal
-        if right_index - index > (right - left) * 0.5:
-            # clip rectangle to data region
-            left_2 = self.get_x_from_time(signal.data.get_time_at_index(0))
-            right_2 = self.get_x_from_time(signal.data.get_time_at_index(-1))
-            left = max(left, left_2)
-            right = min(right, right_2)
-            # set pen and brush to stipple pattern
-            pen = wx.Pen(signal.color, 1)
-            brush = wx.Brush(signal.color)
-            bmp = self.create_stipple_bitmap(signal.color)
-            brush.SetStipple(bmp)
-            pen.SetStipple(bmp)
-            dc.SetPen(pen)
-            dc.SetBrush(brush)
-            # draw the rectangle
-            dc.DrawRectangle(left, y1, right - left + 1, y2 - y1 + 1)
-            dc.DestroyClippingRegion()
-            return
-        """
         # get the correct signal polarity
         if index % 2 == 1:
             signal_low = not signal_low
@@ -433,25 +387,14 @@ class BilevelData(Data):
         data_length = len(self.edges)
         for _ in range(right_index - index):
             x1 = x2
-            # if we're past the viewing window, we're done
-            # if x1 > right:
-            #    break
-            # if not the first point, draw the vertical line
-            # if i2 > 0: # and left <= x1 <= right:
             if index > 0 and index < data_length - 1:
                 dc.DrawRectangle(x1, y1, thickness, height)
             # go to the next value
             index += 1
             signal_low = not signal_low
-            # if index >= len(data.data):
-            #    break
             time = self.get_time_at_index(index)
             # ticks += length
             x2 = left + round((time - left_time) * pixels_per_second)
-            # if in range, draw the edge
-            # if False and (x2 < left or x1 > right):
-            #    pass
-            # else:
             if x1 <= right and x2 >= left:
                 y = y2 - thickness + 1 if signal_low else y1
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
