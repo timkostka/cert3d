@@ -492,18 +492,27 @@ class ScopePanel(wx.Panel):
 
     def event_mouse_wheel(self, event):
         """Handle scrolling in/out via the mouse wheel."""
-        scale = 1.3 if event.GetWheelRotation() < 0 else 1 / 1.3
+        scale = 2.0 ** (1.0 / 3.0)
+        # if Ctrl is held, zoom faster
+        if wx.GetKeyState(wx.WXK_SHIFT):
+            scale = 2.0
+        if event.GetWheelRotation() < 0:
+            scale = 1.0 / scale
         dx = self.margin + self.channel_length + self.padding2
+        # get min and max scale
+        max_scale = self.maximum_pixels_per_second / self.pixels_per_second
+        min_scale = self.minimum_pixels_per_second / self.pixels_per_second
+        assert min_scale <= max_scale
+        # clip scale to min, max bounds
+        scale = max(min_scale, min(scale, max_scale))
+        # adjust start time so time at cursor remains the same
         x = event.GetPosition()[0]
-        self.start_time += (x - dx) / self.pixels_per_second * (1 - scale)
-        self.pixels_per_second /= scale
-        # TODO: adjust clipping so data at cursor doesn't move if this is clipped
-        if self.pixels_per_second > self.maximum_pixels_per_second:
-            self.pixels_per_second = self.maximum_pixels_per_second
-        if self.pixels_per_second < self.minimum_pixels_per_second:
-            self.pixels_per_second = self.minimum_pixels_per_second
-        self.update_signal_zoom()
-        self.Refresh()
+        # apply the scale
+        if scale != 1.0:
+            self.pixels_per_second *= scale
+            self.start_time -= (x - dx) / self.pixels_per_second * (1 - scale)
+            self.update_signal_zoom()
+            self.Refresh()
 
     def get_x_from_time(self, duration):
         """Return the x pixels corresponding to the given duration."""

@@ -144,12 +144,12 @@ class Data:
         """Return True if empty."""
         raise NotImplementedError
 
-    def get_edge_near_time(self, time):
-        """Should return the time closest to the given time, or None."""
-        raise NotImplementedError
-
     def get_length(self):
         """Return the length of the data."""
+        raise NotImplementedError
+
+    def get_edge_near_time(self, time):
+        """Should return the time closest to the given time, or None."""
         raise NotImplementedError
 
     def draw_signal(
@@ -161,6 +161,7 @@ class Data:
         left_time: float,
         pixels_per_second: float,
     ):
+        """Draw the signal on the screen."""
         raise NotImplementedError
 
 
@@ -296,7 +297,8 @@ class BilevelData(Data):
     def draw_signal(
         self, dc, rect, color, thickness, left_time, pixels_per_second
     ):
-        """Draw the signal on the display."""
+        """Draw the signal on the screen."""
+        # if it's empty, nothing to draw
         if self.is_empty():
             return
         # set pen and brush
@@ -373,6 +375,13 @@ class TriStateData(Data):
             return None
         return self.get_time_at_index(-1) - self.get_time_at_index(0)
 
+    def get_edge_near_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        index = self.find_closest_index(target_time)
+        if index is None:
+            return None
+        return self.get_time_at_index(index)
+
     def find_index_after(self, target_time):
         """Return the first index at or after the given time."""
         if self.is_empty():
@@ -435,7 +444,8 @@ class TriStateData(Data):
     def draw_signal(
         self, dc, rect, color, thickness, left_time, pixels_per_second
     ):
-        """Draw the signal to the screen."""
+        """Draw the signal on the screen."""
+        # if it's empty, nothing to draw
         if self.is_empty():
             return
         # create solid brush for drawing edges
@@ -454,16 +464,6 @@ class TriStateData(Data):
         dc.SetPen(solid_pen)
         # clip to the specified region
         dc.SetClippingRegion(*rect)
-        # get pixels per tick
-        # pixels_per_tick = self.seconds_per_tick * pixels_per_second
-        # find x pixel of start of channel data
-        # channel_left = (
-        #        rect[0]
-        #        + (
-        #                    self.start_time - self.start_time) * pixels_per_second
-        # )
-        # adjust for thickness of line
-        # channel_left -= (thickness - 1) / 2.0
         # alias some things to shorter names
         y1 = rect[1]
         y2 = y1 + rect[3] - 1
@@ -499,119 +499,3 @@ class TriStateData(Data):
                 dc.SetBrush(gray_brush)
                 dc.DrawRectangle(x1, y1, x2 - x1 + thickness, y2 - y1 + 1)
         dc.DestroyClippingRegion()
-
-
-'''
-        """Draw the signal on the display."""
-        # set pen and brush
-        dc.SetPen(wx.Pen(color, 1))
-        dc.SetBrush(wx.Brush(color))
-        # clip to the specified region
-        dc.SetClippingRegion(*rect)
-        # true if signal is low
-        # note we start on the opposite edge, since we flip it before drawing
-        # the first plateau
-        signal_low = self.start_high
-        # alias some things to shorter names
-        y1 = rect[1]
-        y2 = y1 + rect[3] - 1
-        height = rect[3]
-        width = rect[2]
-        left = rect[0]
-        right = rect[0] + rect[2] - 1
-        # find first index to left of window
-        index = self.find_index_after(left_time)
-        if index > 0:
-            index -= 1
-        # find first index to the right of the window
-        right_index = self.find_index_after(
-            left_time + width / pixels_per_second
-        )
-        # get the correct signal polarity
-        if index % 2 == 1:
-            signal_low = not signal_low
-
-        # get time at the index
-        time = self.get_time_at_index(index)
-        # time = data.start_time + data.data[index] * data.seconds_per_tick
-        x2 = left + round((time - left_time) * pixels_per_second)
-        data_length = len(self.edges)
-        for _ in range(right_index - index):
-            x1 = x2
-            if index > 0 and index < data_length - 1:
-                dc.DrawRectangle(x1, y1, thickness, height)
-            # go to the next value
-            index += 1
-            signal_low = not signal_low
-            time = self.get_time_at_index(index)
-            # ticks += length
-            x2 = left + round((time - left_time) * pixels_per_second)
-            if x1 <= right and x2 >= left:
-                y = y2 - thickness + 1 if signal_low else y1
-                dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
-        dc.DestroyClippingRegion()
-'''
-
-'''
-    def get_length(self):
-        """Return the length of the data in seconds, or None."""
-        if not self.points:
-            return None
-        return (self.points[-1][0] - self.points[0][0]) * self.seconds_per_tick
-
-    def find_index_after(self, target_time):
-        """Return the first index at or after the given time."""
-        if not self.points:
-            return None
-        low = 0
-        high = len(self.points) - 1
-        # loop until low and high are adjacent
-        while low < high:
-            test = (low + high) // 2
-            time = self.start_time + self.points[test][
-                0] * self.seconds_per_tick
-            if time < target_time:
-                assert low < test + 1
-                low = test + 1
-            else:
-                assert high > test
-                high = test
-        return low
-
-    def get_time_at_index(self, index):
-        """Return the time at the given data index."""
-        return self.start_time + self.points[index][0] * self.seconds_per_tick
-
-    def find_closest_index(self, target_time):
-        """Return the data index closest to the given time."""
-        if not self.points:
-            return None
-        if target_time < self.start_time:
-            return 0
-        index = self.find_index_after(target_time)
-        if index is None:
-            return len(self.points) - 1
-        # else it's either index or index - 1
-        if index == 0:
-            return index
-        low = self.get_time_at_index(index - 1)
-        high = self.get_time_at_index(index)
-        if abs(target_time - low) < abs(target_time - high):
-            return index - 1
-        else:
-            return index
-
-    def get_closest_time(self, target_time):
-        """Return the edge time closest to the target time, or None."""
-        index = self.find_closest_index(target_time)
-        if index is None:
-            return None
-        return self.get_time_at_index(index)
-
-    def get_edge_near_time(self, target_time):
-        """Return the edge time closest to the target time, or None."""
-        index = self.find_closest_index(target_time)
-        if index is None:
-            return None
-        return self.get_time_at_index(index)
-'''
