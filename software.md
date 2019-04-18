@@ -111,3 +111,82 @@ The problem with this is the "collapse a duration."  Collapsing a single duratio
 2. Create a list of double edge durations (i.e. the duration between edge 0 and edge 2, edge 1 and edge, 3, edge 2 and edge 4, etc...).  Take twice the median of this list.  Collapse all durations which are less than this value.
 
 3. Note that collapsing a duration means setting the value from 0 or 1 to 2, and combining adjacent durations of value 2.
+
+This works really well.  I implemented it within a `DataCluster` object for now.
+
+### Object achitecture
+
+We have a lot of different objects which are all related.  Maybe we can get rid of some and make the heirarchy flatter?  Maybe we can eliminate or consolidate some `*Data` types?
+
+Where should all these objects live, in terms of files?
+
+Here is our current file/object heirarchy:
+
+* File `AnalysisWindowBase.py`
+  * Object `AnalysisWindowBase`
+  * (Auto-generated from wxFormBuilder)
+* File `cert3d.py`
+  * Object `AnalysisWindow` which inherits from `AnalysisWindowBase`
+    * Inherits from `AnalysisWindowBase` 
+* File `ScopePanel.py`
+  * Object `ScopePanel` which inherits from `wx.Panel`
+* File `ScopeChannel.py`
+  * Object `Signal`
+  * Object `ScopeChannel`
+* File `dpi.py`
+  * Contains methods for working with high (and low) DPI displays.
+* File `BilevelData.py`
+  * Object `DataCluster`
+  * Object `BilevelData`
+  * Object `TriStateData`
+* File `PlotData.py`
+  * Object `PlotData`
+
+Here is our window object heirarchy
+
+* Object `AnalysisWindow`
+  * Many standard objects like buttons, which are not listed here
+  * Object `ScopePanel`
+    * Many visual properties like zoom state, channel length, etc.
+    * Time offset of start of display (in seconds)
+    * Zoom state (in pixels per second)
+    * Many `ScopeChannel` objects
+      * channel height
+      * (if necessary as for `PlotData`), value at bottom and top
+      * Each can have many `Signal` objects
+        * name of signal
+        * color of signal
+        * thickness of signal
+        * reference to active data
+        * function to select active data given a zoom factor
+        * `DataCluster` object with min zoom state and data objects
+
+I think I should eliminate the `DataCluster` object and turn it into a property of a `Signal`.
+
+Here's what a `Signal` could look like:
+
+* Object `Signal`
+  * property `name` for name of signal, displayed on left of the channel
+  * property `color` of type `wx.Colour`
+  * property `thickness` for thickness in pixels of the signal drawn
+  * property `active_data` which points to the active data based on zoom level of type (`BilevelData`, `TriStateData`, or `PlotData`)
+  * property `data_cluster` which is a list of (`min_zoom`, `data`)
+    * property `min_zoom` is the minimum zoom at which this data can be active
+    * property `data` is a data of type (`BilevelData`, `TriStateData`, or `PlotData`)
+  * function `draw_signal` which draws the signal on a rectangle
+    * parameter `wx.DC`
+    * parameter `wx.Rectangle`
+    * parameter `pixels_per_second`
+    * parameter `start_time` which is the time at the very left of the rectangle
+    * parameter `value_range` which is the value at the bottom and top of the rectangle.  Only used for data of type `PlotData`.
+
+The `Signal` object should have the following:
+
+* Parameter `start_time` for the start of the data time
+* Function `get_length()` which returns the length of the data
+
+Each `*Data` type should have the following parameters/functions:
+
+* Parameter `points` which holds the data points in a format used only by itself.
+* Parameter `start_time` for the start of the data time
+* Function `get_edge_near_time(time)` which returns the time of the edge closest to the given time.

@@ -18,11 +18,8 @@ import serial.tools.list_ports
 import wx
 
 from AnalysisWindowBase import AnalysisWindowBase
-from BilevelData import BilevelData
-from BilevelData import TriStateData
-from ScopeChannel import ScopeChannel
-from ScopeChannel import Signal
-from PlotData import PlotData
+from Data import *
+from ScopePanel import *
 
 vid = 0x0483
 pid = 0x5740
@@ -59,6 +56,40 @@ c3d_data_rate_frequency = 4.0
 
 # main window
 c3d_gui_window = None
+
+
+def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
+    """Given the STEP and DIR channels, return position."""
+    time = step_channel.start_time == dir_channel.start_time
+    dir_is_up = dir_channel.start_high
+    # get microstep vs time
+    data = []
+    data.append((0, 0))
+    steps = 0
+    # loop through until we reach the end of either stream
+    try:
+        dir_it = iter(dir_channel.data)
+        dir_is_low = not dir_channel.start_high
+        remaining_dir_ticks = next(dir_it)
+        assert step_channel.start_high is False
+        step_is_low = not step_channel.start_high
+        ticks = 0
+        for pulse in step_channel.data:
+            ticks += pulse
+            step_is_low = not step_is_low
+            remaining_dir_ticks -= pulse
+            while remaining_dir_ticks < 0:
+                dir_is_low = not dir_is_low
+                remaining_dir_ticks += next(dir_it)
+            # if we transitioned high, increase or decrease step
+            if dir_is_low:
+                steps -= 1
+            else:
+                steps += 1
+            data.append((ticks, steps))
+    except StopIteration:
+        pass
+    return data
 
 
 def find_c3d_ports():
@@ -183,46 +214,11 @@ all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
 
 
 class AnalysisWindow(AnalysisWindowBase):
+
     def __init__(self, parent):
         super(AnalysisWindow, self).__init__(parent)
-
         # set icon
         self.SetIcon(wx.Icon("c3d_icon.ico"))
-
-        # add some junk data
-        for name in [
-            "X_STEP",
-            "X_DIR",
-            "Y_STEP",
-            "Y_DIR",
-            "Z_STEP",
-            "Z_DIR",
-            "E_STEP",
-            "E_DIR",
-        ]:
-            data = TriStateData()
-            channel = ScopeChannel(data)
-            channel.height = random.randint(asize(12), asize(12))
-            channel.signals[-1].name = name
-            channel.signals[-1].color = wx.GREEN  # random.choice(all_colors)
-            channel.signals[-1].thickness = 1  # random.randint(2, 2)
-            channel.signals[-1].start_high = random.choice([True, False])
-            self.scope_panel.add_channel(channel)
-        for name in ["X_POS", "Y_POS", "Z_POS", "E_POS"]:
-            break
-            data = PlotData()
-            channel = ScopeChannel(data)
-            channel.signals[-1].name = name
-            channel.signals[-1].color = wx.RED  # random.choice(all_colors)
-            channel.signals[-1].thickness = random.randint(1, 1)
-            channel.height = random.randint(asize(80), asize(80))
-            data2 = PlotData()
-            signal2 = Signal(data2)
-            signal2.name = name + "2"
-            signal2.color = wx.CYAN  # random.choice(all_colors)
-            signal2.thickness = random.randint(1, 1)
-            channel.add_signal(signal2)
-            self.scope_panel.add_channel(channel)
         # ratio of the entire display to take up for the initial window
         ratio = 0.6
         # reduce window size to maintain 16:9 ratio
@@ -441,6 +437,12 @@ def run_gui():
     c3d_gui_window.scope_panel.zoom_to_all()
     # set this as the top-level window
     app.SetTopWindow(c3d_gui_window)
+
+    data = TriStateData()
+    data.invent_data(10000)
+    print(data.data[:10])
+    cluster = create_signal_cluster(data.data)
+
     # start the child thread
     assert port_thread is None
     port_thread = Thread(target=port_monitor_thread)

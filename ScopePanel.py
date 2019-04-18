@@ -9,8 +9,7 @@ import wx
 
 from dpi import asize
 
-from BilevelData import BilevelData, TriStateData
-from PlotData import PlotData
+from Data import *
 
 # possible colors for signals
 all_signal_colors = [
@@ -25,41 +24,68 @@ all_signal_colors = [
 ]
 
 
-def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
-    """Given the STEP and DIR channels, return position."""
-    time = step_channel.start_time == dir_channel.start_time
-    dir_is_up = dir_channel.start_high
-    # get microstep vs time
-    data = []
-    data.append((0, 0))
-    steps = 0
-    # loop through until we reach the end of either stream
-    try:
-        dir_it = iter(dir_channel.data)
-        dir_is_low = not dir_channel.start_high
-        remaining_dir_ticks = next(dir_it)
-        assert step_channel.start_high is False
-        step_is_low = not step_channel.start_high
-        ticks = 0
-        for pulse in step_channel.data:
-            ticks += pulse
-            step_is_low = not step_is_low
-            remaining_dir_ticks -= pulse
-            while remaining_dir_ticks < 0:
-                dir_is_low = not dir_is_low
-                remaining_dir_ticks += next(dir_it)
-            # if we transitioned high, increase or decrease step
-            if dir_is_low:
-                steps -= 1
-            else:
-                steps += 1
-            data.append((ticks, steps))
-    except StopIteration:
+class Signal:
+    def __init__(self, name=None, color=wx.GREEN, thickness=3, data=None):
+        # raw data
+        assert isinstance(data, Data)
+        # name of the signal
+        self.name = name
+        # color of channel
+        self.color = color
+        # width of the channel plot in pixels
+        self.thickness = thickness
+        # data cluster
+        self.data_cluster = [[0, data]]
+        # TODO: create simplified data from this data
+        # active data set
+        self.active_data = data
+        # start time of the data
+        self.start_time = data.start_time
+
+    def set_active_data(self, pixels_per_second):
+        """Set the active data based on the pixels_per_second value."""
+        raise NotImplementedError
+
+    def get_start_time(self):
+        """Return the start time of the signal data in seconds."""
+        if not self.active_data:
+            return 0.0
+        return self.active_data.start_time
+
+    def get_length(self):
+        """Return the length of the signal data in seconds."""
+        if not self.active_data:
+            return 0.0
+        return self.active_data.get_length()
+
+
+class ScopeChannel:
+    def __init__(self, height=30, low_value=0.0, high_value=1.0, signal=None):
+        # height of channel in pixels
+        self.height = height
+        # value at low end of channel
+        # (not used for bilevel channels)
+        self.low_value = None
+        # value at high end of channel
+        # (not used for bilevel channels)
+        self.high_value = None
+        # signals within this scope channel
+        self.signals = []
+        # add data if needed
+        if signal:
+            self.add_signal(signal)
+
+    def add_signal(self, signal):
+        self.signals.append(signal)
+
+    def draw(self, dc):
+        """Draw the channel clipped to the given rectangle DC."""
         pass
-    return data
 
 
 class ScopePanel(wx.Panel):
+    """A ScopePanel is a custom wxWidget to display oscilloscope-type data."""
+
     def __init__(self, parent, id_, position, size, style):
         # print("Initializing!")
         super().__init__(parent, id_, position, size, style)
@@ -72,6 +98,10 @@ class ScopePanel(wx.Panel):
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         # list of channels
         self.channels = []
+        # maximum zoom level to 10 pixels per ns
+        self.maximum_pixels_per_second = asize(30) / 1e-9
+        # minimum zoom level
+        self.minimum_pixels_per_second = 0.0
         # index of selected channel, or None
         self.selected_channel_index = None
         # (channel_index, y_value) used during rearranging channels
@@ -98,8 +128,8 @@ class ScopePanel(wx.Panel):
         self.channel_length = asize(120)
         # leftmost time
         self.start_time = 0.0
-        # seconds per pixel
-        self.seconds_per_pixel = 1.0
+        # zoom factor in pixels per second
+        self.pixels_per_second = 1.0
         # mouse panning memory
         self.panning = False
         self.panning_start = 0
@@ -158,7 +188,6 @@ class ScopePanel(wx.Panel):
         self.Bind(wx.EVT_MIDDLE_UP, self.event_mouse_middle_button_up)
         self.Bind(wx.EVT_MOTION, self.event_mouse_motion)
 
-        # self.Bind(wx.EVT_ENTER_WINDOW, self.asdf)
         self.Bind(wx.EVT_LEAVE_WINDOW, self.event_leave_window)
 
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
@@ -166,6 +195,52 @@ class ScopePanel(wx.Panel):
         self.adjust_channel_name_size()
 
         self.zoom_to_all()
+
+        # populate sample data
+        self.populate_example_data()
+
+    def clear(self):
+        """Erase all channels."""
+        self.channels = []
+
+    def populate_example_data(self):
+        """Populate the display with fabricated."""
+        self.clear()
+        # add some junk data
+        for name in [
+            "X_STEP",
+            "X_DIR",
+            "Y_STEP",
+            "Y_DIR",
+            "Z_STEP",
+            "Z_DIR",
+            "E_STEP",
+            "E_DIR",
+        ]:
+            # create a random signal
+            data = BilevelData()
+            data.invent_data(10000)
+            signal = Signal(name=name, color=wx.GREEN, thickness=1, data=data)
+            # create a channel for this signal
+            channel = ScopeChannel(height=30, signal=signal)
+            # add this channel
+            self.add_channel(channel)
+
+        for name in ["X_POS", "Y_POS", "Z_POS", "E_POS"]:
+            break
+            channel = ScopeChannel(data)
+            channel.add_signal(Signal(data))
+            channel.signals[-1].name = name
+            channel.signals[-1].color = wx.RED  # random.choice(all_colors)
+            channel.signals[-1].thickness = random.randint(1, 1)
+            channel.height = random.randint(asize(80), asize(80))
+            data2 = PlotData()
+            signal2 = Signal(data2)
+            signal2.name = name + "2"
+            signal2.color = wx.CYAN  # random.choice(all_colors)
+            signal2.thickness = random.randint(1, 1)
+            channel.add_signal(signal2)
+            self.add_channel(channel)
 
     def adjust_channel_name_size(self):
         """Find ideal value for self.channel_length."""
@@ -354,23 +429,13 @@ class ScopePanel(wx.Panel):
             self.panning = False
 
     def event_mouse_motion(self, event):
-        # XOR current position
-        # DEBUG
-        if False:
-            dc = wx.ClientDC(self)
-            # set drawing mode to invert color
-            dc.SetLogicalFunction(wx.INVERT)
-            dc.SetPen(wx.WHITE_PEN)
-            dc.SetBrush(wx.WHITE_BRUSH)
-            dc.DrawRectangle(50, 50, 200, 100)
-            del dc
         if self.panning:
             dx = event.GetPosition()[0] - self.panning_start
             # if no net motion, just return
             if not dx:
                 return
             # print('moved by %d pixels' % dx)
-            delta = self.seconds_per_pixel * dx
+            delta = dx / self.pixels_per_second
             self.start_time -= delta
             self.panning_start += dx
             self.Refresh()
@@ -418,24 +483,27 @@ class ScopePanel(wx.Panel):
         """Handle scrolling in/out via the mouse wheel."""
         scale = 1.3 if event.GetWheelRotation() < 0 else 1 / 1.3
         dx = self.margin + self.channel_length + self.padding2
-        # time = self.start_time + (x - dx) * self.seconds_per_pixel
-        # time2 = self.start_time2 + (x - dx) * self.seconds_per_pixel * scale
-        # self.start_time2 = self.start_time + (x - dx) * self.seconds_per_pixel * (1 - scale)
         x = event.GetPosition()[0]
-        self.start_time += (x - dx) * self.seconds_per_pixel * (1 - scale)
-        self.seconds_per_pixel *= scale
+        self.start_time += (x - dx) / self.pixels_per_second * (1 - scale)
+        self.pixels_per_second /= scale
+        # TODO: adjust clipping so data at cursor doesn't move if this is clipped
+        if self.pixels_per_second > self.maximum_pixels_per_second:
+            self.pixels_per_second = self.maximum_pixels_per_second
+        if self.pixels_per_second < self.minimum_pixels_per_second:
+            self.pixels_per_second = self.minimum_pixels_per_second
+        self.update_signal_zoom()
         self.Refresh()
 
     def get_x_from_time(self, duration):
         """Return the x pixels corresponding to the given duration."""
         x = self.margin + self.channel_length + self.padding2
-        x += (duration - self.start_time) / self.seconds_per_pixel
+        x += (duration - self.start_time) * self.pixels_per_second
         return int(x + 0.5)
 
     def get_time_from_x(self, x):
         """Return the time value corresponding to the x position."""
         x -= self.margin + self.channel_length + self.padding2
-        return self.start_time + x * self.seconds_per_pixel
+        return self.start_time + x / self.pixels_per_second
 
     def get_channel_y_values(self, channel_index):
         """Return the top and bottom y pixels for the given channel."""
@@ -444,7 +512,12 @@ class ScopePanel(wx.Panel):
         top += channel_index * self.padding
         return top, top + self.channels[channel_index].height - 1
 
-    def zoom_to_all(self, start=0.0, end=1.0):
+    def update_signal_zoom(self):
+        """Find the best data for the given zoom level."""
+        # TODO: implement this
+        return
+
+    def zoom_to_all(self):
         """Initialize the viewing window to see all data."""
         if not self.channels:
             return
@@ -452,22 +525,25 @@ class ScopePanel(wx.Panel):
         end_times = []
         for channel in self.channels:
             for signal in channel.signals:
-                start_times.append(signal.data.start_time)
-                end_times.append(
-                    signal.data.start_time + signal.data.get_length()
-                )
+                start = signal.get_start_time()
+                length = signal.get_length()
+                start_times.append(start)
+                end_times.append(start + length)
         left = min(start_times) if start_times else 0.0
         right = max(end_times) if end_times else 0.0
-        if start != 0.0 or end != 1.0:
-            assert start < end
-            duration = right - left
-            right = left + end * duration
-            left = left + start * duration
+        panel_width = (
+            self.GetSize()[0]
+            - 2 * self.margin
+            - self.padding2
+            - self.channel_length
+        )
         self.start_time = left
-        self.seconds_per_pixel = 1.0
+        self.pixels_per_second = 1.0
         if right != left:
-            self.seconds_per_pixel = (right - left) / self.GetSize()[0]
-        # zoom channels
+            self.pixels_per_second = (panel_width - 1) / (right - left)
+        self.update_signal_zoom()
+        return
+        # TODO: find low and high value if this contains PlotData type signals
         for channel in self.channels:
             low_values = []
             high_values = []
@@ -614,13 +690,15 @@ class ScopePanel(wx.Panel):
         solid_pen = wx.Pen(signal.color, 1)
         solid_brush = wx.Brush(signal.color)
 
-        gray_color = wx.Colour((signal.color.Red() + 1) // 3,
-                               (signal.color.Green() + 1) // 3,
-                               (signal.color.Blue() + 1) // 3)
+        gray_color = wx.Colour(
+            (signal.color.Red() + 1) // 3,
+            (signal.color.Green() + 1) // 3,
+            (signal.color.Blue() + 1) // 3,
+        )
         gray_pen = wx.Pen(signal.color, 1)
         gray_brush = wx.Brush(gray_color)
         bmp = self.create_stipple_bitmap(gray_color)
-        #gray_pen.SetStipple(bmp)
+        # gray_pen.SetStipple(bmp)
         gray_brush.SetStipple(bmp)
 
         # clip to the specified region
@@ -763,7 +841,7 @@ class ScopePanel(wx.Panel):
         scale = [1.0, 1e-3, 1e-6, 1e-9]
         units = ["s", "ms", "us", "ns"]
         multiples = [1, 2, 5]
-        target_dt = self.seconds_per_pixel * target_width
+        target_dt = target_width / self.pixels_per_second
         # print("Looking for increment near %g s." % target_dt)
         # human dt
         best_diff = None
@@ -805,7 +883,7 @@ class ScopePanel(wx.Panel):
         right = panel_rect[0] - 1
         # draw vertical bars for dt resolution
         dc.SetPen(wx.Pen(wx.Colour(31, 31, 31), 1))
-        dt_pixels = round(self.best_dt / self.seconds_per_pixel)
+        dt_pixels = round(self.best_dt * self.pixels_per_second)
         for x in range(left, right + 1, dt_pixels):
             dc.DrawRectangle(round(x), 0, 1, panel_rect[1])
         # get top pixel for next channel
@@ -853,6 +931,7 @@ class ScopePanel(wx.Panel):
                 y -= (signal_count - 1) * ((rect[1] + 5) // 2)
                 y += signal_index * (rect[1] + 5)
                 dc.DrawText(name, x - rect[0], y)
+                continue
                 # get rect to clip channel data to
                 rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
                 if isinstance(signal.data, BilevelData):
