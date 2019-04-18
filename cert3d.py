@@ -434,14 +434,14 @@ def run_gui():
             channel = c3d_gui_window.scope_panel.channels[index]
             channel.signals[0].data = signal
         del c3d_gui_window.scope_panel.channels[8:]
-    c3d_gui_window.scope_panel.zoom_to_all()
+        c3d_gui_window.scope_panel.zoom_to_all()
     # set this as the top-level window
     app.SetTopWindow(c3d_gui_window)
 
     data = TriStateData()
     data.invent_data(10000)
-    print(data.data[:10])
-    cluster = create_signal_cluster(data.data)
+    print(data.points[:10])
+    cluster = create_signal_cluster(data.points)
 
     # start the child thread
     assert port_thread is None

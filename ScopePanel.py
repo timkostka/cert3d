@@ -202,7 +202,7 @@ class ScopePanel(wx.Panel):
 
         self.zoom_to_all()
 
-        # populate sample data
+        # DEBUG populate sample data
         self.populate_example_data()
 
         self.zoom_to_all()
@@ -226,7 +226,10 @@ class ScopePanel(wx.Panel):
             "E_DIR",
         ]:
             # create a random signal
-            data = BilevelData()
+            if 'DIR' in name:
+                data = TriStateData()
+            else:
+                data = BilevelData()
             data.invent_data(10000)
             signal = Signal(name=name, color=wx.GREEN, thickness=1, data=data)
             # create a channel for this signal

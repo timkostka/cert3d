@@ -4,6 +4,30 @@ import wx
 
 verbose = True
 
+# hold stipple brushes
+stipple_brushes = {}
+
+
+def create_stipple_bitmap(color):
+    """Return the stipple bitmap for the given color."""
+    rgb = color.GetRGB()
+    # if we already created and cached this one, just return it
+    if rgb in stipple_brushes:
+        return stipple_brushes[rgb]
+    # create a new bitmap stipple mask
+    image = wx.Image(16, 16, clear=True)
+    image.InitAlpha()
+    for x in range(image.GetWidth()):
+        for y in range(image.GetHeight()):
+            if (2 * x + y) % 16 < 8:
+                image.SetAlpha(x, y, wx.ALPHA_TRANSPARENT)
+            else:
+                rgb = (color.Red(), color.Green(), color.Blue())
+                image.SetRGB(x, y, *rgb)
+    bmp = wx.Bitmap(image)
+    stipple_brushes[rgb] = bmp
+    return bmp
+
 
 def create_signal_cluster(
     data, pixels_per_screen=2000, max_edges_per_screen=5
@@ -111,6 +135,14 @@ class Data:
     def __init__(self):
         # start time of the data
         self.start_time = None
+        # number of ticks per second
+        self.seconds_per_tick = 1.0 / 168e6
+        # starting time in seconds
+        self.start_time = 0.0
+
+    def is_empty(self):
+        """Return True if empty."""
+        raise NotImplementedError
 
     def get_edge_near_time(self, time):
         """Should return the time closest to the given time, or None."""
@@ -130,99 +162,6 @@ class Data:
         pixels_per_second: float,
     ):
         raise NotImplementedError
-
-
-class TriStateData(Data):
-    """
-    The TriStateData class holds data about edges for a given signal.
-
-    For a given time, the signal is either low, high or tri-state.  The third
-    state is displayed as high-z.
-    """
-
-    def __init__(self):
-        # name of the channel
-        # self.name = "DATA"
-        # number of ticks per second
-        # self.seconds_per_tick = 1.0 / 168e6
-        # time offset
-        self.start_time = 0.0
-        # (x, y) tuples for each state, where (y=0 low, 1 high, or 2 tri-state)
-        # y gives the value of the data prior to this time
-        self.points = []
-        self.invent_data(1000)  # DEBUG
-
-    def get_length(self):
-        """Return the length of the data in seconds, or None."""
-        if not self.data:
-            return None
-        return (self.data[-1][0] - self.data[0][0]) * self.seconds_per_tick
-
-    def find_index_after(self, target_time):
-        """Return the first index at or after the given time."""
-        if not self.data:
-            return None
-        low = 0
-        high = len(self.data) - 1
-        # loop until low and high are adjacent
-        while low < high:
-            test = (low + high) // 2
-            time = self.start_time + self.data[test][0] * self.seconds_per_tick
-            if time < target_time:
-                assert low < test + 1
-                low = test + 1
-            else:
-                assert high > test
-                high = test
-        return low
-
-    def get_time_at_index(self, index):
-        """Return the time at the given data index."""
-        return self.start_time + self.data[index][0] * self.seconds_per_tick
-
-    def find_closest_index(self, target_time):
-        """Return the data index closest to the given time."""
-        if not self.data:
-            return None
-        if target_time < self.start_time:
-            return 0
-        index = self.find_index_after(target_time)
-        if index is None:
-            return len(self.data) - 1
-        # else it's either index or index - 1
-        if index == 0:
-            return index
-        low = self.get_time_at_index(index - 1)
-        high = self.get_time_at_index(index)
-        if abs(target_time - low) < abs(target_time - high):
-            return index - 1
-        else:
-            return index
-
-    def invent_data(self, length=200):
-        """Populate with randomly generated data."""
-        tick_count = 0
-        new_value = 0
-        self.data = []
-        self.data.append((tick_count, new_value))
-        for _ in range(length):
-            tick_count += round(1.0 + 5.0 * random.random())
-            if random.random() < 0.01:
-                tick_count += 100 * round(1.0 + 5.0 * random.random())
-            if random.random() < 0.001:
-                tick_count += 2000 * round(1.0 + 5.0 * random.random())
-            value = new_value
-            new_value = random.randint(0, 1)
-            if value == new_value:
-                new_value = 2
-            self.data.append((tick_count, new_value))
-
-    def get_closest_time(self, target_time):
-        """Return the edge time closest to the target time, or None."""
-        index = self.find_closest_index(target_time)
-        if index is None:
-            return None
-        return self.get_time_at_index(index)
 
 
 class PlotData:
@@ -269,6 +208,8 @@ class BilevelData(Data):
     """The BilevelData class holds data about edges for a given signal."""
 
     def __init__(self):
+        # call higher level init
+        super(BilevelData, self).__init__()
         # number of ticks per second
         self.seconds_per_tick = 1.0 / 168e6
         # starting time in seconds
@@ -279,6 +220,16 @@ class BilevelData(Data):
         self.edges = []
         # invent random data
         self.invent_data(10000)  # DEBUG
+
+    def is_empty(self):
+        """Return True if empty."""
+        return not self.edges
+
+    def get_length(self):
+        """Return the length of the data in seconds, or None."""
+        if self.is_empty():
+            return None
+        return self.get_time_at_index(-1) - self.get_time_at_index(0)
 
     def invent_data(self, length=200):
         """Populate with randomly generated data."""
@@ -293,12 +244,6 @@ class BilevelData(Data):
             if random.random() < 0.001:
                 tick_count += 2000 * round(1.0 + 5.0 * random.random())
             self.edges.append(tick_count)
-
-    def get_length(self):
-        """Return the length of the data in seconds, or None."""
-        if not self.edges:
-            return None
-        return (self.edges[-1] - self.edges[0]) * self.seconds_per_tick
 
     def find_index_after(self, target_time):
         """Return the first index at or after the given time."""
@@ -352,6 +297,212 @@ class BilevelData(Data):
         self, dc, rect, color, thickness, left_time, pixels_per_second
     ):
         """Draw the signal on the display."""
+        if self.is_empty():
+            return
+        # set pen and brush
+        dc.SetPen(wx.Pen(color, 1))
+        dc.SetBrush(wx.Brush(color))
+        # clip to the specified region
+        dc.SetClippingRegion(*rect)
+        # true if signal is low
+        # note we start on the opposite edge, since we flip it before drawing
+        # the first plateau
+        signal_low = self.start_high
+        # alias some things to shorter names
+        y1 = rect[1]
+        y2 = y1 + rect[3] - 1
+        height = rect[3]
+        width = rect[2]
+        left = rect[0]
+        # find first index to left of window
+        index = self.find_index_after(left_time)
+        if index > 0:
+            index -= 1
+        # find first index to the right of the window
+        right_index = self.find_index_after(
+            left_time + width / pixels_per_second
+        )
+        # get the correct signal polarity
+        if index % 2 == 1:
+            signal_low = not signal_low
+        # get time at the index
+        time = self.get_time_at_index(index)
+        x2 = left + round((time - left_time) * pixels_per_second)
+        for _ in range(right_index - index):
+            x1 = x2
+            # draw transition on leading edge
+            if index > 0:
+                dc.DrawRectangle(x1, y1, thickness, height)
+            # go to the next value
+            index += 1
+            signal_low = not signal_low
+            time = self.get_time_at_index(index)
+            x2 = left + round((time - left_time) * pixels_per_second)
+            y = y2 - thickness + 1 if signal_low else y1
+            dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
+        dc.DestroyClippingRegion()
+
+
+class TriStateData(Data):
+    """
+    The TriStateData class holds data about edges for a given signal.
+
+    For a given time, the signal is either low, high or tri-state.  The third
+    state is displayed as high-z.
+    """
+
+    def __init__(self):
+        # call higher level init
+        super(TriStateData, self).__init__()
+        # time corresponding to tick 0
+        self.start_time = 0.0
+        # number of ticks per second
+        self.seconds_per_tick = 1.0 / 168e6
+        # (x, y) tuples for each state, where (y=0 low, 1 high, or 2 tri-state)
+        # y gives the value of the data prior to this time
+        self.points = []
+        self.invent_data(1000)  # DEBUG
+
+    def is_empty(self):
+        """Return True if empty."""
+        return not self.points
+
+    def get_length(self):
+        """Return the length of the data in seconds, or None."""
+        if self.is_empty():
+            return None
+        return self.get_time_at_index(-1) - self.get_time_at_index(0)
+
+    def find_index_after(self, target_time):
+        """Return the first index at or after the given time."""
+        if self.is_empty():
+            return None
+        low = 0
+        high = len(self.points) - 1
+        # loop until low and high are adjacent
+        while low < high:
+            test = (low + high) // 2
+            time = self.get_time_at_index(test)
+            if time < target_time:
+                assert low < test + 1
+                low = test + 1
+            else:
+                assert high > test
+                high = test
+        return low
+
+    def get_time_at_index(self, index):
+        """Return the time at the given data index."""
+        return self.start_time + self.points[index][0] * self.seconds_per_tick
+
+    def find_closest_index(self, target_time):
+        """Return the data index closest to the given time."""
+        if self.is_empty():
+            return None
+        if target_time < self.start_time:
+            return 0
+        index = self.find_index_after(target_time)
+        if index is None:
+            return len(self.points) - 1
+        # else it's either index or index - 1
+        if index == 0:
+            return index
+        low = self.get_time_at_index(index - 1)
+        high = self.get_time_at_index(index)
+        if abs(target_time - low) < abs(target_time - high):
+            return index - 1
+        else:
+            return index
+
+    def invent_data(self, length=200):
+        """Populate with randomly generated data."""
+        tick_count = 0
+        new_value = random.randint(0, 2)
+        self.points = []
+        self.points.append((tick_count, new_value))
+        for _ in range(length):
+            tick_count += round(1.0 + 5.0 * random.random())
+            if random.random() < 0.01:
+                tick_count += 100 * round(1.0 + 5.0 * random.random())
+            if random.random() < 0.001:
+                tick_count += 2000 * round(1.0 + 5.0 * random.random())
+            value = new_value
+            new_value = random.randint(0, 1)
+            if value == new_value:
+                new_value = 2
+            self.points.append((tick_count, new_value))
+
+    def draw_signal(
+        self, dc, rect, color, thickness, left_time, pixels_per_second
+    ):
+        """Draw the signal to the screen."""
+        if self.is_empty():
+            return
+        # create solid brush for drawing edges
+        solid_pen = wx.Pen(color, 1)
+        solid_brush = wx.Brush(color)
+        # create stipple brush for third state data
+        gray_color = wx.Colour(
+            (color.Red() + 1) // 3,
+            (color.Green() + 1) // 3,
+            (color.Blue() + 1) // 3,
+        )
+        gray_brush = wx.Brush(gray_color)
+        bmp = create_stipple_bitmap(gray_color)
+        gray_brush.SetStipple(bmp)
+        # set the pen to use (but not the brush)
+        dc.SetPen(solid_pen)
+        # clip to the specified region
+        dc.SetClippingRegion(*rect)
+        # get pixels per tick
+        # pixels_per_tick = self.seconds_per_tick * pixels_per_second
+        # find x pixel of start of channel data
+        # channel_left = (
+        #        rect[0]
+        #        + (
+        #                    self.start_time - self.start_time) * pixels_per_second
+        # )
+        # adjust for thickness of line
+        # channel_left -= (thickness - 1) / 2.0
+        # alias some things to shorter names
+        y1 = rect[1]
+        y2 = y1 + rect[3] - 1
+        height = rect[3]
+        width = rect[2]
+        left = rect[0]
+        # find first index within window
+        index = self.find_index_after(left_time)
+        if index > 0:
+            index -= 1
+        # find first index after window
+        right_index = self.find_index_after(
+            left_time + width / pixels_per_second
+        )
+        time = self.get_time_at_index(index)
+        x2 = left + round((time - left_time) * pixels_per_second)
+        for _ in range(right_index - index):
+            x1 = x2
+            # draw transition on leading edge
+            if index > 0:
+                dc.DrawRectangle(x1, y1, thickness, height)
+            # go to the next value
+            index += 1
+            time = self.get_time_at_index(index)
+            value = self.points[index][1]
+            x2 = left + round((time - left_time) * pixels_per_second)
+            # if it's a high or low edge, draw it
+            if value == 0 or value == 1:
+                dc.SetBrush(solid_brush)
+                y = y2 - thickness + 1 if value == 0 else y1
+                dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
+            else:
+                dc.SetBrush(gray_brush)
+                dc.DrawRectangle(x1, y1, x2 - x1 + thickness, y2 - y1 + 1)
+        dc.DestroyClippingRegion()
+
+
+'''
+        """Draw the signal on the display."""
         # set pen and brush
         dc.SetPen(wx.Pen(color, 1))
         dc.SetBrush(wx.Brush(color))
@@ -399,3 +550,68 @@ class BilevelData(Data):
                 y = y2 - thickness + 1 if signal_low else y1
                 dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
+'''
+
+'''
+    def get_length(self):
+        """Return the length of the data in seconds, or None."""
+        if not self.points:
+            return None
+        return (self.points[-1][0] - self.points[0][0]) * self.seconds_per_tick
+
+    def find_index_after(self, target_time):
+        """Return the first index at or after the given time."""
+        if not self.points:
+            return None
+        low = 0
+        high = len(self.points) - 1
+        # loop until low and high are adjacent
+        while low < high:
+            test = (low + high) // 2
+            time = self.start_time + self.points[test][
+                0] * self.seconds_per_tick
+            if time < target_time:
+                assert low < test + 1
+                low = test + 1
+            else:
+                assert high > test
+                high = test
+        return low
+
+    def get_time_at_index(self, index):
+        """Return the time at the given data index."""
+        return self.start_time + self.points[index][0] * self.seconds_per_tick
+
+    def find_closest_index(self, target_time):
+        """Return the data index closest to the given time."""
+        if not self.points:
+            return None
+        if target_time < self.start_time:
+            return 0
+        index = self.find_index_after(target_time)
+        if index is None:
+            return len(self.points) - 1
+        # else it's either index or index - 1
+        if index == 0:
+            return index
+        low = self.get_time_at_index(index - 1)
+        high = self.get_time_at_index(index)
+        if abs(target_time - low) < abs(target_time - high):
+            return index - 1
+        else:
+            return index
+
+    def get_closest_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        index = self.find_closest_index(target_time)
+        if index is None:
+            return None
+        return self.get_time_at_index(index)
+
+    def get_edge_near_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        index = self.find_closest_index(target_time)
+        if index is None:
+            return None
+        return self.get_time_at_index(index)
+'''
