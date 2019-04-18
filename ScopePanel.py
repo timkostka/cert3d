@@ -58,6 +58,12 @@ class Signal:
             return 0.0
         return self.active_data.get_length()
 
+    def draw_signal(self, *args, **kwargs):
+        """Draw the signal"""
+        if not self.active_data:
+            return
+        self.active_data.draw_signal(*args, **kwargs)
+
 
 class ScopeChannel:
     def __init__(self, height=30, low_value=0.0, high_value=1.0, signal=None):
@@ -198,6 +204,8 @@ class ScopePanel(wx.Panel):
 
         # populate sample data
         self.populate_example_data()
+
+        self.zoom_to_all()
 
     def clear(self):
         """Erase all channels."""
@@ -899,8 +907,8 @@ class ScopePanel(wx.Panel):
             else:
                 thickness = self.channel_separator_thickness
                 y0 = top + self.padding // 2 - thickness // 2
-                dc.SetPen(wx.Pen(wx.LIGHT_GREY, 1))
-                dc.SetBrush(wx.LIGHT_GREY_BRUSH)
+                dc.SetPen(wx.Pen(wx.Colour(31, 31, 31), 1))
+                dc.SetBrush(wx.Brush(wx.Colour(31, 31, 31)))
                 dc.DrawRectangle(0, y0, right + 1, thickness)
                 top += self.padding
             # get top (y1) and bottom (y2) of display
@@ -931,9 +939,18 @@ class ScopePanel(wx.Panel):
                 y -= (signal_count - 1) * ((rect[1] + 5) // 2)
                 y += signal_index * (rect[1] + 5)
                 dc.DrawText(name, x - rect[0], y)
-                continue
                 # get rect to clip channel data to
                 rect = wx.Rect(left, y1, right - left + 1, y2 - y1 + 1)
+                # draw signal within this rect
+                signal.draw_signal(
+                    dc,
+                    rect,
+                    signal.color,
+                    signal.thickness,
+                    self.start_time,
+                    self.pixels_per_second,
+                )
+                continue
                 if isinstance(signal.data, BilevelData):
                     self.draw_bileveldata_channel(dc, rect, channel, signal)
                 elif isinstance(signal.data, PlotData):
