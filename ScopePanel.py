@@ -15,7 +15,7 @@ from Data import *
 max_points_per_screen = 500
 
 # screen size in pixels
-screen_size = asize(1000)
+screen_size = 1000
 
 # possible colors for signals
 all_signal_colors = [
@@ -52,13 +52,18 @@ class Signal:
         while data.get_point_count() > max_points_per_screen:
             new_data = data.get_reduced_data()
             self.data_cluster.append([0, new_data])
-            break
+            data = new_data
         # find zoom levels for each set
         for i in range(len(self.data_cluster)):
             data = self.data_cluster[i][1]
-            min_seconds = data.get_min_period_with_point_count(max_points_per_screen)
+            min_seconds = data.get_min_period_with_point_count(
+                max_points_per_screen
+            )
             min_pixels_per_second = screen_size / min_seconds
             self.data_cluster[i][0] = min_pixels_per_second
+        # DEBUG
+        if True:
+            print([(x[1].get_point_count(), x[0]) for x in self.data_cluster])
         # set min zoom level of most simplified set to 0
         self.data_cluster[-1][0] = 0.0
 
@@ -119,7 +124,9 @@ class ScopePanel(wx.Panel):
     def __init__(self, parent, id_, position, size, style):
         # print("Initializing!")
         super().__init__(parent, id_, position, size, style)
-
+        # get estimated number of pixels per screen
+        global screen_size
+        screen_size = asize(1920)
         # create popup menu for signal style
         self.style_popup_menu = self.create_style_menu()
         # create the context popup handler
@@ -250,11 +257,11 @@ class ScopePanel(wx.Panel):
             "E_DIR",
         ]:
             # create a random signal
-            if 'DIR' in name and False:
+            if "DIR" in name and False:
                 data = TriStateData()
             else:
                 data = BilevelData()
-            data.invent_data(10000)
+            data.invent_data(1000000)
             signal = Signal(name=name, color=wx.GREEN, thickness=1, data=data)
             # create a channel for this signal
             channel = ScopeChannel(height=30, signal=signal)

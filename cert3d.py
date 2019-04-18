@@ -438,10 +438,11 @@ def run_gui():
     # set this as the top-level window
     app.SetTopWindow(c3d_gui_window)
 
-    data = TriStateData()
-    data.invent_data(10000)
-    print(data.points[:10])
-    cluster = create_signal_cluster(data.points)
+    if False:
+        data = TriStateData()
+        data.invent_data(10000)
+        print(data.points[:10])
+        cluster = create_signal_cluster(data.points)
 
     # start the child thread
     assert port_thread is None

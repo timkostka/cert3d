@@ -7,6 +7,12 @@ verbose = True
 # hold stipple brushes
 stipple_brushes = {}
 
+# reduction_threshold
+reduction_threshold = 0.25
+
+# DEBUG
+random.seed(0)
+
 
 def create_stipple_bitmap(color):
     """Return the stipple bitmap for the given color."""
@@ -28,7 +34,7 @@ def create_stipple_bitmap(color):
     stipple_brushes[rgb] = bmp
     return bmp
 
-
+'''
 def create_signal_cluster(
     data, pixels_per_screen=2000, max_edges_per_screen=500
 ):
@@ -54,7 +60,7 @@ def create_signal_cluster(
         durations.sort()
         # get threshold duration to collapse
         # the median of the combined duration of each adjacent edge pair
-        threshold = durations[len(durations) // 2]
+        threshold = durations[round(len(durations) * reduction_threshold)]
         # get durations between adjacent edges
         durations = [y[0] - x[0] for x, y in zip(data[:-1], data[1:])]
         # location of new edges
@@ -99,7 +105,6 @@ def create_signal_cluster(
     return cluster
 
 
-'''
 class DataCluster:
     """A DataCluster contains a set of data sets for different zoom levels."""
 
@@ -172,6 +177,10 @@ class Data:
         pixels_per_second: float,
     ):
         """Draw the signal on the screen."""
+        raise NotImplementedError
+
+    def get_min_period_with_point_count(self, point_count):
+        """Return the minimum period in seconds with X points."""
         raise NotImplementedError
 
     def get_reduced_data(self):
@@ -286,7 +295,7 @@ class TriStateData(Data):
         """Return the minimum period in seconds with X points."""
         assert point_count > 1
         if self.get_point_count() <= point_count:
-            return float('inf')
+            return float("inf")
         ticks = min(
             y[0] - x[0]
             for x, y in zip(
@@ -344,12 +353,16 @@ class TriStateData(Data):
         solid_brush = wx.Brush(color)
         # create stipple brush for third state data
         gray_color = wx.Colour(
-            (color.Red() + 1) // 3,
-            (color.Green() + 1) // 3,
-            (color.Blue() + 1) // 3,
+            (color.Red() + 1) * 2 // 3,
+            (color.Green() + 1) * 2 // 3,
+            (color.Blue() + 1) * 2 // 3,
         )
-        gray_brush = wx.Brush(gray_color)
-        bmp = create_stipple_bitmap(gray_color)
+        if True:
+            gray_brush = wx.Brush(gray_color)
+            bmp = create_stipple_bitmap(gray_color)
+        else:
+            gray_brush = wx.Brush(color)
+            bmp = create_stipple_bitmap(color)
         gray_brush.SetStipple(bmp)
         # set the pen to use (but not the brush)
         dc.SetPen(solid_pen)
@@ -390,6 +403,81 @@ class TriStateData(Data):
                 dc.SetBrush(gray_brush)
                 dc.DrawRectangle(x1, y1, x2 - x1 + thickness, y2 - y1 + 1)
         dc.DestroyClippingRegion()
+
+    def validate(self):
+        """Raise an error is the data is invalid."""
+        # if empty, it's fine
+        if self.is_empty():
+            return True
+        # must have at least 2 points
+        assert self.get_point_count() >= 2
+        # ensure data points are ascending
+        assert all(
+            self.points[i + 1][0] >= self.points[i][0]
+            for i in range(len(self.points) - 1)
+        )
+        # ensure adjacent points apart from the first two are different types
+        check = all(
+            self.points[i + 1][1] != self.points[i][1]
+            for i in range(len(self.points) - 1, 1)
+        )
+        # DEBUG
+        if not check:
+            print([x[1] for x in self.points[:50]])
+            print([x[1] for x in self.points[-50:]])
+        assert check
+        return True
+
+    def get_reduced_data(self):
+        """Approximate the data with a reduced set and return it."""
+        # can only reduce if we have enough data
+        if self.get_point_count() < 3:
+            return
+        # ensure data is valid
+        self.validate()
+        # find durations for consecutive pairs of durations
+        durations = [
+            y[0] - x[0] for x, y in zip(self.points[:-2], self.points[2:])
+        ]
+        durations.sort()
+        # get threshold duration to collapse
+        # the median of the combined duration of each adjacent edge pair
+        threshold = durations[round(len(durations) * reduction_threshold)]
+        del durations
+        # old index of last edge in the new data set
+        last_index = 0
+        # add the first edge
+        new_points = []
+        new_points.append(self.points[0])
+        for i in range(len(self.points) - 1):
+            # collapse if value is high-z or if duration is under threshold
+            collapse = (
+                self.points[i + 1][0] - self.points[i][0] <= threshold
+                or self.points[i + 1][1] == 2
+            )
+            if not collapse:
+                # add previous region if necessary
+                if last_index != i:
+                    if last_index == i - 1:
+                        new_points.append(self.points[i])
+                    else:
+                        new_points.append((self.points[i][0], 2))
+                # add this region
+                new_points.append(self.points[i + 1])
+                last_index = i + 1
+        # add last region if necessary
+        if last_index != len(self.points) - 1:
+            if last_index == len(self.points) - 2:
+                new_points.append(self.points[-1])
+            else:
+                new_points.append((self.points[-1][0], 2))
+        # create new data
+        new_data = TriStateData()
+        new_data.start_time = self.start_time
+        new_data.seconds_per_tick = self.seconds_per_tick
+        new_data.points = new_points
+        new_data.validate()
+        return new_data
 
 
 class BilevelData(Data):
@@ -463,7 +551,7 @@ class BilevelData(Data):
         """Return the minimum period in seconds with X points."""
         assert point_count > 1
         if self.get_point_count() <= point_count:
-            return float('inf')
+            return float("inf")
         ticks = min(
             y - x
             for x, y in zip(
@@ -551,7 +639,7 @@ class BilevelData(Data):
     def get_reduced_data(self):
         """Approximate the data with a reduced set and return it."""
         # can only reduce if we have enough data
-        if len(self.edges) < 3:
+        if self.get_point_count() < 3:
             return
         # ensure data is monotonically increasing
         assert all(
@@ -563,13 +651,14 @@ class BilevelData(Data):
         durations.sort()
         # get threshold duration to collapse
         # the median of the combined duration of each adjacent edge pair
-        threshold = durations[len(durations) // 2]
+        threshold = durations[round(len(durations) * reduction_threshold)]
         del durations
         # old index of last edge in the new data set
         last_index = 0
         # add the first edge
         new_points = []
         new_points.append((self.edges[0], 0))
+        # print('edges =', self.edges[-10:])
         value = 0 if self.start_high else 1
         for i in range(len(self.edges) - 1):
             value = (value + 1) % 2
@@ -586,7 +675,7 @@ class BilevelData(Data):
         # add last region if necessary
         if last_index != len(self.edges) - 1:
             if last_index == len(self.edges) - 2:
-                new_points.append((self.edges[-1], (value + 1) % 2))
+                new_points.append((self.edges[-1], value))
             else:
                 new_points.append((self.edges[-1], 2))
         # create new data
@@ -594,48 +683,5 @@ class BilevelData(Data):
         new_data.start_time = self.start_time
         new_data.seconds_per_tick = self.seconds_per_tick
         new_data.points = new_points
+        new_data.validate()
         return new_data
-        # get durations between adjacent edges
-        durations = [
-            y[0] - x[0] for x, y in zip(self.edges[:-1], self.edges[1:])
-        ]
-        # convert durations to true/false to collapse
-        collapse_edge = [x <= threshold for x in durations]
-        # don't collapse edge if no neighbor is collapsed
-        for i in range(1, len(collapse_edge) - 1):
-            if collapse_edge[i]:
-                if not collapse_edge[i - 1] and not collapse_edge[i + 1]:
-                    collapse_edge[i] = False
-        # store indices of edges to keep
-        keep_index = [i for i, x in enumerate(collapse_edge, 1) if not x]
-        # location of new edges
-        new_points = []
-        # old index of last edge in the new data set
-        last_index = 0
-        # add the first edge
-        new_points = []
-        new_points.append(self.edges[0])
-        # true if previous edge was collapsed
-        last_edge_collapsed = False
-        for index in range(1, len(self.edges)):
-            pass
-            # collapse this if
-            # last edge was collapsed and duration is below threshold
-            # duration of
-
-        # loop over each index
-        while last_index < len(self.edges) - 1:
-            # collapse edges until threshold duration is met
-            index = last_index + 1
-            while (
-                index < len(data) - 1
-                and data[index][0] - data[index - 1][0] <= threshold
-            ):
-                index += 1
-            if index > last_index + 1:
-                new_points.append((data[index][0], 2))
-            else:
-                new_points.append(data[index])
-            last_index = index
-        data = new_points
-        cluster.append([0, data])
