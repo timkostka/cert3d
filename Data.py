@@ -443,7 +443,7 @@ class TriStateData(Data):
         durations.sort()
         # get threshold duration to collapse
         # the median of the combined duration of each adjacent edge pair
-        threshold = durations[round(len(durations) * reduction_threshold)]
+        threshold = 2 * durations[round(len(durations) * reduction_threshold)]
         del durations
         # old index of last edge in the new data set
         last_index = 0
@@ -675,7 +675,7 @@ class BilevelData(Data):
         durations.sort()
         # get threshold duration to collapse
         # the median of the combined duration of each adjacent edge pair
-        threshold = durations[round(len(durations) * reduction_threshold)]
+        threshold = 2 * durations[round(len(durations) * reduction_threshold)]
         del durations
         # old index of last edge in the new data set
         last_index = 0

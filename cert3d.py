@@ -26,40 +26,44 @@ pid = 0x5740
 
 verbose = True
 
-exit_children = False
+# exit_children = False
 
 # flag to clear the log file
-clear_log_file = False
+# clear_log_file = False
 
 # flag to log to file
-log_to_file = True
+# log_to_file = True
 
 # flag for open log file (not thread safe but probably fine)
-log_file_open = False
+# log_file_open = False
 
 # thread for monitoring the port
-port_thread = None
+# port_thread = None
 
-c3d_port = None
+# c3d_port = None
 
 # data rate in Mbps
-c3d_data_rate = 0.0
+# c3d_data_rate = 0.0
 
 # bytes received since last data rate check
-c3d_data_rate_bytes = 0
+# c3d_data_rate_bytes = 0
 
 # time of last data rate check
-c3d_data_rate_time = 0
+# c3d_data_rate_time = 0
 
 # frequency of data rate calculations
-c3d_data_rate_frequency = 4.0
+# c3d_data_rate_frequency = 4.0
 
 # main window
-c3d_gui_window = None
+# c3d_gui_window = None
+
+# default file name
+c3d_log_filename = "c3d_data.bin"
 
 
 def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
     """Given the STEP and DIR channels, return position."""
+    raise NotImplementedError
     time = step_channel.start_time == dir_channel.start_time
     dir_is_up = dir_channel.start_high
     # get microstep vs time
@@ -104,6 +108,7 @@ def find_c3d_ports():
     return c3d_ports
 
 
+'''
 def find_and_open_c3d_port():
     """Attempt to find and open a C3D port and set it to c3d_port."""
     global c3d_port
@@ -131,8 +136,9 @@ def find_and_open_c3d_port():
             ):
                 raise
             print("Unable to connect to %s" % port.device)
+'''
 
-
+'''
 def c3d_update_data_rate(byte_count):
     """Update the data rate variable with X additional bytes since last call."""
     this_time = time.time()
@@ -150,8 +156,9 @@ def c3d_update_data_rate(byte_count):
             print("Data rate is %g Mbps" % c3d_data_rate)
         text = "%.2g Mbps" % c3d_data_rate
         c3d_gui_window.static_text_data_rate.SetLabel(text)
+'''
 
-
+'''
 def c3d_monitor_port(filename):
     """Connect to a serial port and store incoming data to the given file."""
     global c3d_port
@@ -208,7 +215,7 @@ def port_monitor_thread():
                 text = "n/a"
                 c3d_gui_window.static_text_data_rate.SetLabel(text)
     print("Child thread exited")
-
+'''
 
 all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
 
@@ -226,7 +233,8 @@ class AnalysisWindow(AnalysisWindowBase):
         window_size = [round(16 * scaler), round(9 * scaler)]
         self.SetSize(window_size)
         self.Centre()
-
+        # create slave thread to monitor c3d port
+        self.c3d_port_thread = SlaveThread()
         # adjust signal name width
         self.scope_panel.adjust_channel_name_size()
         # zoom to all
@@ -234,16 +242,13 @@ class AnalysisWindow(AnalysisWindowBase):
 
     def event_close(self, event):
         print("Handling EVT_CLOSE event")
-        # signal child thread to exit
-        global exit_children
-        exit_children = True
         # hide window immediately
         print("Hiding window")
         self.Hide()
+        # signal child thread to exit
         # join child thread
         print("Joining child thread")
-        port_thread.join()
-        # close window
+        self.c3d_port_thread.exit_and_join()
         print("Closing window")
         # process this event
         event.Skip()
@@ -253,23 +258,23 @@ class AnalysisWindow(AnalysisWindowBase):
         self.Close()
 
     def event_button_start_stream_click(self, _event):
-        if c3d_port:
-            c3d_port.write(b"start")
+        self.c3d_port_thread.log_to_file = True
+        self.c3d_port_thread.open_port_automatically = True
+        self.c3d_port_thread.send_command(b"start")
 
     def event_button_stop_stream_click(self, _event):
-        if c3d_port:
-            c3d_port.write(b"stop")
+        self.c3d_port_thread.log_to_file = False
+        self.c3d_port_thread.open_port_automatically = True
+        self.c3d_port_thread.send_command(b"stop")
 
     def event_button_zoom_all_click(self, event):
         self.scope_panel.zoom_to_all()
 
     def event_button_debug_click(self, event):
-        if c3d_port:
-            c3d_port.write(b"debug")
+        self.c3d_port_thread.send_command(b"debug")
 
     def event_button_reset_click(self, event):
-        if c3d_port:
-            c3d_port.write(b"reset")
+        self.c3d_port_thread.send_command(b"reset")
 
     def event_button_clear_log_click(self, event):
         global clear_log_file
@@ -292,13 +297,18 @@ class AnalysisWindow(AnalysisWindowBase):
         del c3d_gui_window.scope_panel.channels[8:]
 
     def event_button_interpret_click(self, _event):
-        data = interpret_data("incoming_data.c3d")
-        if data is None:
-            print("ERROR: no data in file")
+        # stop streaming and close file
+        self.event_button_stop_stream_click(_event)
+        # wait until file is closed
+        while self.c3d_port_thread.log_file:
+            time.sleep(0.010)
+        signals = interpret_data(self.c3d_port_thread.log_filename)
+        if signals is None:
+            print("ERROR: could not interpret log file")
             return
-        print([x.get_length() for x in data])
+        print([x.get_length() for x in signals])
         # replace signal data with data from file
-        for index, this_data in enumerate(data):
+        for index, this_data in enumerate(signals):
             channel = c3d_gui_window.scope_panel.channels[index]
             name = channel.signals[0].name
             channel.signals = []
@@ -306,6 +316,22 @@ class AnalysisWindow(AnalysisWindowBase):
         self.scope_panel.zoom_to_all()
         self.scope_panel.Refresh()
         del c3d_gui_window.scope_panel.channels[8:]
+
+    def event_timer_update_ui(self, _event):
+        # noinspection PyUnusedLocal
+        port_name = "Disconnected"
+        # noinspection PyUnusedLocal
+        data_rate = "n/a"
+        try:
+            port_name = "C3D on %s" % self.c3d_port_thread.serial_port.port
+            data_rate = '%.3f Mbps' % self.c3d_port_thread.get_data_rate_mbps()
+        except AttributeError:
+            # this is triggered when the serial port is closed
+            pass
+        if port_name != self.static_text_usb_port_status.GetLabel():
+            self.static_text_usb_port_status.SetLabel(port_name)
+        if data_rate != self.static_text_data_rate.GetLabel():
+            self.static_text_data_rate.SetLabel(data_rate)
 
 
 class Packet:
@@ -373,13 +399,6 @@ def packets_to_signals(packets):
 
 def interpret_data(filename):
     """Interpret streamed data within the file and return signals."""
-    # close the log file
-    global log_to_file
-    global log_file_open
-    log_to_file = False
-    print("\nWaiting for log file to be closed")
-    while log_file_open:
-        time.sleep(0.010)
     print("\nReading info block")
     with open(filename, "rb") as f:
         # read info block
@@ -437,38 +456,210 @@ def interpret_data(filename):
     return signals
 
 
+class SlaveThread:
+    """This is a class to control and communicate with the slave thread."""
+
+    def __init__(self):
+        """Create a new slave thread."""
+        # if True, open the C3D port
+        self.open_port_automatically = True
+        # if True, read data and clear buffer, but don't write it to a file
+        self.discard_data = False
+        # if True, log to file
+        self.log_to_file = True
+        # if True, close all ports and files and exit
+        self.exit_thread = False
+        # USB serial port open with Cert3D board
+        self.serial_port = None
+        # log filename
+        self.log_filename = c3d_log_filename
+        # log file objec
+        self.log_file = None
+        # number of bytes read from the serial port
+        self.bytes_read = 0
+        # if True, overwrite log file instead of appending
+        # self.overwrite_log_file = True
+        # create and start the Thread object
+        self.thread = Thread(target=self.entry_point)
+        self.thread.start()
+        # history for the data rate
+        self.data_rate_history = [(time.time(), 0)]
+
+    def get_data_rate_mbps(self):
+        """Return the estimated data rate in Mbps."""
+        # number of seconds to average over
+        averaging_duration = 1.0
+        # add a data point
+        this_time = time.time()
+        history = self.data_rate_history
+        history.append((this_time, self.bytes_read))
+        # remove obsolete data points
+        while (
+            len(history) > 2 and history[0][0] < this_time - averaging_duration
+        ):
+            del history[0]
+        # estimate rate
+        assert len(history) >= 2
+        delta_time = min(averaging_duration, history[-1][0] - history[0][0])
+        assert delta_time > 0
+        byte_count = history[-1][1] - history[0][1]
+        assert byte_count >= 0
+        mbps = byte_count * 8e-6 / delta_time
+        return mbps
+
+    def read_and_ignore_data(self):
+        """Read and ignore data on the port until a command changes."""
+        while not self.exit_thread:
+            if not self.open_port_automatically:
+                break
+            if not self.discard_data:
+                break
+            # read and ignore data
+            try:
+                data = self.serial_port.read(self.serial_port.in_waiting)
+                self.bytes_read += len(data)
+            except (
+                serial.serialutil.SerialTimeoutException,
+                serial.serialutil.SerialException,
+            ):
+                print("Cert3D board serial port disappeared!")
+                self.serial_port.close()
+                self.serial_port = None
+
+    def log_data_to_file(self):
+        """Read and log data on the port until a command changes."""
+        # open log file if it's not already open
+        if not self.log_file:
+            self.log_file = open(self.log_filename, "bw")
+        while not self.exit_thread:
+            if not self.open_port_automatically:
+                break
+            if self.discard_data:
+                break
+            if not self.log_to_file:
+                break
+            # read data and log to file
+            try:
+                data = self.serial_port.read(self.serial_port.in_waiting)
+                self.bytes_read += len(data)
+            except (
+                serial.serialutil.SerialTimeoutException,
+                serial.serialutil.SerialException,
+            ):
+                print("Cert3D board serial port disappeared!")
+                self.serial_port.close()
+                self.serial_port = None
+                break
+            # write data to file
+            self.log_file.write(data)
+        # close the log file
+        self.log_file.close()
+        self.log_file = None
+
+    def open_port(self):
+        """Try to find and open the cert3d board."""
+        # open port if it's not already open
+        if not self.serial_port:
+            for port in find_c3d_ports():
+                try:
+                    serial_port = serial.Serial(
+                        port=port.device,
+                        baudrate=115200,
+                        timeout=0,
+                        parity=serial.PARITY_EVEN,
+                    )
+                    self.serial_port = serial_port
+                    print("Connected to C3D board on %s." % port.device)
+                except serial.serialutil.SerialException as e:
+                    # There is a bug somewhere (win10 usbser?) that causes a
+                    # call to win32.SetCommState from serialwin32.py:220 to
+                    # fail and return with:
+                    #   OSError(22, 'The parameter is incorrect.', None, 87)
+                    # No solution to this has been identified.  Many users have
+                    # encountered it.  If we simply ignore this error, the
+                    # program works fine, so that is exactly what we do.
+                    #
+                    # Except we can't, since the object never gets saved to
+                    # serial_port.  I have to edit the PySerial library to get
+                    # this to work correctly.
+                    #
+                    # After later consideration, I believe this issue is caused
+                    # by a non-graceful shutdown of the COM port.  It seems to
+                    # be self-correcting, in that if you wait 5-10 minutes, the
+                    # error doesn't come up.  So it should not be a large issue
+                    # for users, since abrupt board resets should not happen.
+                    if (
+                        "OSError(22, 'The parameter is incorrect.', None, 87)"
+                        in str(e)
+                    ):
+                        raise
+                    print("Unable to connect to %s" % port.device)
+
+    def entry_point(self):
+        """Entry point of the slave thread."""
+        print("Slave thread is born!")
+        while not self.exit_thread:
+            time.sleep(0.050)
+            # if we're not connecting to anything, just idle
+            if not self.open_port_automatically:
+                # close port if it's open
+                if self.serial_port:
+                    self.serial_port.close()
+                    self.serial_port = None
+                # close log file if it's open
+                if self.log_file:
+                    self.log_file.close()
+                    self.log_file = None
+                continue
+            # try to open the port
+            self.open_port()
+            # if port isn't open, just continue
+            if not self.serial_port:
+                continue
+            # at this point, we need to do
+            if self.discard_data:
+                self.read_and_ignore_data()
+            elif self.log_to_file:
+                self.log_data_to_file()
+            # log file shouldn't be open
+            assert not self.log_file
+        print("Slave thread is dying!")
+
+    def is_alive(self):
+        """Return True if thread is alive."""
+        return self.thread.is_alive()
+
+    def exit_and_join(self):
+        """Exit this thread and join it."""
+        self.exit_thread = True
+        start = time.time()
+        while self.thread.is_alive():
+            time.sleep(0.010)
+            if time.time() - start > 5:
+                print("ERROR: slave thread not exiting")
+                exit(1)
+        self.thread.join()
+
+    def send_command(self, command):
+        """Send a command over the Cert3D board port."""
+        if self.serial_port:
+            self.serial_port.write(command)
+        else:
+            print("WARNING: port not open")
+
+
 def run_gui():
     """Run the GUI application."""
     global c3d_gui_window
-    global port_thread
-    global exit_children
     dpi.set_dpi_aware()
     # create the window
     app = wx.App()
     c3d_gui_window = AnalysisWindow(None)
-    # DEBUG
-    if False:
-        signals = interpret_data("incoming_data - Copy.c3d")
-        # replace signal data with data from file
-        for index, signal in enumerate(signals):
-            channel = c3d_gui_window.scope_panel.channels[index]
-            channel.signals[0].data = signal
-        del c3d_gui_window.scope_panel.channels[8:]
-        c3d_gui_window.scope_panel.zoom_to_all()
     # set this as the top-level window
     app.SetTopWindow(c3d_gui_window)
-
-    if False:
-        data = TriStateData()
-        data.invent_data(10000)
-        print(data.points[:10])
-        cluster = create_signal_cluster(data.points)
-
-    # start the child thread
-    assert port_thread is None
-    port_thread = Thread(target=port_monitor_thread)
-    port_thread.start()
+    # show the window
     c3d_gui_window.Show()
+    # start the GUI
     app.MainLoop()
 
 

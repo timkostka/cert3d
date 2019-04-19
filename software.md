@@ -190,3 +190,20 @@ Each `*Data` type should have the following parameters/functions:
 * Parameter `points` which holds the data points in a format used only by itself.
 * Parameter `start_time` for the start of the data time
 * Function `get_edge_near_time(time)` which returns the time of the edge closest to the given time.
+
+I did this, it seems way better.  The `cert3d.py` file is a little busy, but workable.
+
+### Slave thread instructions
+
+The slave thread is necessary because the buffers for the USB data on both the STM32 side and the computer side are small.  In order to maximize throughput, the port needs to be read out very quickly.  The slave this does this without any interruption from other things such as UI redrawing.  Even with the PIL, this works well since most of the waiting is IO based.
+
+The master thread needs to communicate with the slave.  It does so through some global variables.
+
+The master thread should be able to know when the slave thread has crashed.  It can do so with this `Thread.is_alive` function.
+
+Here are some instructions we need to implement:
+
+* Open USB port (or don't)
+* Start or stop logging to file, or read but ignore data
+  * File is only open when logging is active
+* Exit thread

@@ -311,7 +311,7 @@
                                         <property name="gripper">0</property>
                                         <property name="hidden">0</property>
                                         <property name="id">wxID_ANY</property>
-                                        <property name="label">1.234 Mbps</property>
+                                        <property name="label">n/a</property>
                                         <property name="markup">0</property>
                                         <property name="max_size"></property>
                                         <property name="maximize_button">0</property>
@@ -1305,6 +1305,15 @@
                         <event name="OnMenuSelection">event_file_exit</event>
                     </object>
                 </object>
+            </object>
+            <object class="wxTimer" expanded="1">
+                <property name="enabled">1</property>
+                <property name="id">wxID_ANY</property>
+                <property name="name">timer_update_ui</property>
+                <property name="oneshot">0</property>
+                <property name="period">100</property>
+                <property name="permission">protected</property>
+                <event name="OnTimer">event_timer_update_ui</event>
             </object>
         </object>
     </object>
