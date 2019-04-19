@@ -108,115 +108,6 @@ def find_c3d_ports():
     return c3d_ports
 
 
-'''
-def find_and_open_c3d_port():
-    """Attempt to find and open a C3D port and set it to c3d_port."""
-    global c3d_port
-    for port in find_c3d_ports():
-        try:
-            serial_port = serial.Serial(
-                port=port.device,
-                baudrate=115200,
-                timeout=0,
-                parity=serial.PARITY_EVEN,
-            )
-            c3d_port = serial_port
-            print("Connected to C3D board on %s." % port.device)
-        except serial.serialutil.SerialException as e:
-            # There is a bug somewhere (win10 usbser?) that causes a call to
-            # win32.SetCommState from serialwin32.py:220 to fail and return
-            # with: OSError(22, 'The parameter is incorrect.', None, 87)
-            # No solution to this has been identified.  Many users have
-            # encountered it.  If we simply ignore this error, the program
-            # works fine, so that is exactly what we do.
-            #
-            # Except we can't, since the object never gets saved to serial_port
-            if "OSError(22, 'The parameter is incorrect.', None, 87)" in str(
-                e
-            ):
-                raise
-            print("Unable to connect to %s" % port.device)
-'''
-
-'''
-def c3d_update_data_rate(byte_count):
-    """Update the data rate variable with X additional bytes since last call."""
-    this_time = time.time()
-    global c3d_data_rate_bytes
-    global c3d_data_rate_time
-    global c3d_data_rate
-    global c3d_gui_window
-    c3d_data_rate_bytes += byte_count
-    period = 1.0 / c3d_data_rate_frequency
-    if this_time - c3d_data_rate_time > period:
-        c3d_data_rate = c3d_data_rate_bytes * 8.0 / 1e6 / period
-        c3d_data_rate_bytes = 0
-        c3d_data_rate_time = this_time
-        if c3d_data_rate:
-            print("Data rate is %g Mbps" % c3d_data_rate)
-        text = "%.2g Mbps" % c3d_data_rate
-        c3d_gui_window.static_text_data_rate.SetLabel(text)
-'''
-
-'''
-def c3d_monitor_port(filename):
-    """Connect to a serial port and store incoming data to the given file."""
-    global c3d_port
-    global exit_children
-    global clear_log_file
-    global log_file_open
-    if not log_to_file:
-        time.sleep(0.010)
-        return
-    clear_log_file = False
-    with open("incoming_data.c3d", "bw") as f:
-        log_file_open = True
-        # read data and put it into file
-        try:
-            while not exit_children and not clear_log_file and log_to_file:
-                time.sleep(0.001)
-                data = c3d_port.read(c3d_port.in_waiting)
-                c3d_update_data_rate(len(data))
-                if data:
-                    f.write(data)
-        except (
-            serial.serialutil.SerialTimeoutException,
-            serial.serialutil.SerialException,
-        ):
-            # port was likely closed or removed
-            print("Port disappeared!")
-            c3d_port = None
-    log_file_open = False
-
-
-def port_monitor_thread():
-    """Entry point for the C3D board port monitor."""
-    # run until children are killed
-    global c3d_gui_window
-    global exit_children
-    global c3d_port
-    while not exit_children:
-        # pause 50ms between polling for C3D port
-        time.sleep(0.050)
-        if not c3d_port:
-            find_and_open_c3d_port()
-            # update label
-            if c3d_port:
-                text = "C3D on %s" % c3d_port.port
-                c3d_gui_window.static_text_usb_port_status.SetLabel(text)
-                text = "..."
-                c3d_gui_window.static_text_data_rate.SetLabel(text)
-        else:
-            c3d_monitor_port("incoming_buffer.c3d")
-            # update label
-            if not c3d_port:
-                text = "Disconnected"
-                c3d_gui_window.static_text_usb_port_status.SetLabel(text)
-                text = "n/a"
-                c3d_gui_window.static_text_data_rate.SetLabel(text)
-    print("Child thread exited")
-'''
-
 all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
 
 
@@ -281,7 +172,7 @@ class AnalysisWindow(AnalysisWindowBase):
         clear_log_file = True
 
     def event_button_debug_2_click(self, event):
-        data = interpret_data("incoming_data - Copy.c3d")
+        data = interpret_data("c3d_data - Copy.bin")
         if data is None:
             print("ERROR: no data in file")
             return
@@ -324,7 +215,7 @@ class AnalysisWindow(AnalysisWindowBase):
         data_rate = "n/a"
         try:
             port_name = "C3D on %s" % self.c3d_port_thread.serial_port.port
-            data_rate = '%.3f Mbps' % self.c3d_port_thread.get_data_rate_mbps()
+            data_rate = "%.3f Mbps" % self.c3d_port_thread.get_data_rate_mbps()
         except AttributeError:
             # this is triggered when the serial port is closed
             pass
@@ -332,6 +223,76 @@ class AnalysisWindow(AnalysisWindowBase):
             self.static_text_usb_port_status.SetLabel(port_name)
         if data_rate != self.static_text_data_rate.GetLabel():
             self.static_text_data_rate.SetLabel(data_rate)
+
+
+class InfoHeader:
+    """An InfoHeader contains information about sets of Packets."""
+
+    def __init__(self, file):
+        # True if the information is complete
+        self.valid = False
+        # frequency of the system processor
+        self.system_clock = None
+        # number of signal channels
+        self.signal_count = None
+        # frequency for each signal channel
+        self.signal_frequencies = []
+        # timer period in ticks for each signal channel
+        self.signal_overflow_ticks = []
+        # system ticks per ADC reading (1 sample on all channels)
+        self.ticks_per_adc_reading = None
+        # number of ADC channels
+        self.adc_count = None
+        # low/high value for ADC channels
+        self.adc_ranges = None
+        # try to parse from reading file
+        self.read_from_file(file)
+
+    def read_from_file(self, file):
+        """Populate information from the given file object."""
+        try:
+            print("Reading header")
+            # read info block
+            start = file.read(9).decode("utf-8")
+            assert start == "InfoStart"
+            # read clock speed
+            self.system_clock = struct.unpack("L", file.read(4))[0]
+            print("- Clock speed: %d" % self.system_clock)
+            self.signal_count = struct.unpack("B", file.read(1))[0]
+            print("- Signal count: %d" % self.signal_count)
+            self.adc_count = struct.unpack("B", file.read(1))[0]
+            print("- ADC count: %d" % self.adc_count)
+            self.ticks_per_adc_reading = struct.unpack("L", file.read(4))[0]
+            print("- Ticks per ADC reading: %d" % self.ticks_per_adc_reading)
+            self.signal_frequencies = []
+            self.signal_overflow_ticks = []
+            for i in range(self.signal_count):
+                clock = struct.unpack("L", file.read(4))[0]
+                overflow = struct.unpack("L", file.read(4))[0]
+                self.signal_frequencies.append(clock)
+                self.signal_overflow_ticks.append(overflow)
+                print('  - Signal channel %d: clock=%d Hz, overflow=%d ticks'
+                      % (i + 1, clock, overflow))
+            self.adc_ranges = [
+                (
+                    struct.unpack("f", file.read(4))[0],
+                    struct.unpack("f", file.read(4))[0],
+                )
+                for _ in range(self.adc_count)
+            ]
+            stop = file.read(8).decode("utf-8")
+            assert stop == "InfoStop"
+            print(" - Success!")
+            self.valid = True
+        except:
+            # AssertionError
+            print("ERROR: unable to read header")
+            self.valid = False
+            raise
+
+    def is_valid(self):
+        """Return True if the info is valid."""
+        return self.valid
 
 
 class Packet:
@@ -355,37 +316,63 @@ class Packet:
         assert adc_count == 0
 
 
-def packets_to_signals(packets):
+def packets_to_signals(packets, header: InfoHeader):
     """Process packets and return signals."""
-    signal_count = 8
+    # get system ticks for each timer overflow
+    ticks_per_overflow = [
+        1.0 * header.signal_frequencies[i] / header.signal_overflow_ticks[i]
+        for i in range(header.signal_count)
+    ]
+    assert len(set(ticks_per_overflow)) == 1
+    # get system ticks per packet
+    system_ticks_per_packet = header.system_clock * header.signal_overflow_ticks[0] / header.signal_frequencies[0] / 2
+    assert system_ticks_per_packet == int(system_ticks_per_packet)
+    system_ticks_per_packet = int(system_ticks_per_packet)
     # number of ticks per packet
-    ticks_per_packet = 2 ** 15
+    #ticks_per_packet = 2 ** 15
     # number of ticks in a timer (before it rolls over)
-    cycle_count = 2 ** 16
+    #cycle_count = 2 ** 16
     # hold edges for each signal
-    edges = [[0] for _ in range(signal_count)]
-    deltas = [[] for _ in range(signal_count)]
+    edges = [[0] for _ in range(header.signal_count)]
+    deltas = [[] for _ in range(header.signal_count)]
     # hold a tick value just below what is expected in this cycle
-    expected = -ticks_per_packet // 4
-    # print([x.channel_edges for x in packets[:3]])
+    #expected = -ticks_per_packet // 4
+    # convert edges for each channel to another format
+    # signal_ticks[0] = [(cycle1, value1), (cycle2, value2), etc...]
+    signal_ticks = [[] for _ in range(header.signal_count)]
     for packet_index, packet in enumerate(packets):
         # process each channel
         for channel_index, cycle in enumerate(packet.channel_edges):
-            for delta in cycle:
-                deltas[channel_index].append((delta, packet_index, expected))
-                this_tick = (delta - expected) % cycle_count + expected
-                edges[channel_index].append(this_tick)
-        expected += ticks_per_packet
-    # add data to finish signals
-    for i in range(signal_count):
-        edges[i].append(len(packets) * ticks_per_packet)
+            if cycle:
+                signal_ticks[channel_index].extend([(packet_index, delta)
+                                                    for delta in cycle])
+    # now process each channel
+    for channel_index, ticks in enumerate(signal_ticks):
+        # store range of deltas
+        delta_values = []
+        # get timer ticks per packet
+        ticks_per_packet = system_ticks_per_packet * header.signal_frequencies[channel_index] // header.system_clock
+        expected_offset = -ticks_per_packet // 16
+        # get overflow
+        overflow = 2 * ticks_per_packet
+        assert overflow == header.signal_overflow_ticks[channel_index]
+        for (cycle, delta) in signal_ticks[channel_index]:
+            expected = cycle * ticks_per_packet + expected_offset
+            delta_from_expected = (delta - expected) % overflow
+            delta_values.append(delta_from_expected)
+            this_tick = expected + delta_from_expected
+            edges[channel_index].append(this_tick)
+        if delta_values:
+            print('expected=%d, overflow=%d, delta min=%d, max=%d' % (expected_offset, overflow, min(delta_values) + expected_offset, max(delta_values) + expected_offset))
+        # add data to finish signals
+        edges[channel_index].append(len(packets) * ticks_per_packet)
     # DEBUG
     print("Edges in each channel:", [len(x) - 2 for x in edges])
     print([x[:10] for x in edges])
     #    print("Edges in each channel:", [len(x) - 2 for x in edges])
     # process each signal into a BilevelData object
     signals = []
-    for i in range(signal_count):
+    for i in range(header.signal_count):
         data = BilevelData()
         data.start_time = 0.0
         data.start_high = False
@@ -399,37 +386,12 @@ def packets_to_signals(packets):
 
 def interpret_data(filename):
     """Interpret streamed data within the file and return signals."""
-    print("\nReading info block")
     with open(filename, "rb") as f:
-        # read info block
-        start = f.read(9).decode("utf-8")
-        if start != "InfoStart":
-            return None
-        print("- InfoStart")
-        # read clock speed
-        clock = struct.unpack("L", f.read(4))[0]
-        print("- Clock speed: %d" % clock)
-        signal_count = struct.unpack("B", f.read(1))[0]
-        print("- Signal count: %d" % signal_count)
-        adc_count = struct.unpack("B", f.read(1))[0]
-        print("- ADC count: %d" % adc_count)
-        signal_clocks = [
-            struct.unpack("L", f.read(4))[0] for _ in range(signal_count)
-        ]
-        # print(signal_clocks)
-        adc_ranges = [
-            (
-                struct.unpack("f", f.read(4))[0],
-                struct.unpack("f", f.read(4))[0],
-            )
-            for _ in range(adc_count)
-        ]
-        # print(adc_ranges)
-        stop = f.read(8).decode("utf-8")
-        if stop != "InfoStop":
+        # read header
+        header = InfoHeader(f)
+        if not header.is_valid():
             return None
         # now read each packet
-        print("- InfoStop")
         index = 0
         packets = []
         while True:
@@ -449,10 +411,11 @@ def interpret_data(filename):
             index += 1
         # process data
         print("Found %d packets" % len(packets))
-    # log data
-    log_to_file = True
-    # convert bilevel data
-    signals = packets_to_signals(packets)
+    # convert packets to BilevelData
+    signals = packets_to_signals(packets, header)
+    # set clock for each signal
+    for i in range(header.signal_count):
+        signals[i].seconds_per_tick = 1.0 / header.signal_frequencies[i]
     return signals
 
 
