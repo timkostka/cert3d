@@ -214,7 +214,6 @@ all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
 
 
 class AnalysisWindow(AnalysisWindowBase):
-
     def __init__(self, parent):
         super(AnalysisWindow, self).__init__(parent)
         # set icon
@@ -261,9 +260,8 @@ class AnalysisWindow(AnalysisWindowBase):
         if c3d_port:
             c3d_port.write(b"stop")
 
-    def event_button_info_click(self, event):
-        if c3d_port:
-            c3d_port.write(b"info")
+    def event_button_zoom_all_click(self, event):
+        self.scope_panel.zoom_to_all()
 
     def event_button_debug_click(self, event):
         if c3d_port:
@@ -277,15 +275,34 @@ class AnalysisWindow(AnalysisWindowBase):
         global clear_log_file
         clear_log_file = True
 
-    def event_button_interpret_click(self, _event):
-        signals = interpret_data("incoming_data.c3d")
-        if signals is None:
+    def event_button_debug_2_click(self, event):
+        data = interpret_data("incoming_data - Copy.c3d")
+        if data is None:
             print("ERROR: no data in file")
             return
+        print([x.get_length() for x in data])
         # replace signal data with data from file
-        for index, signal in enumerate(signals):
+        for index, this_data in enumerate(data):
             channel = c3d_gui_window.scope_panel.channels[index]
-            channel.signals[0].data = signal
+            name = channel.signals[0].name
+            channel.signals = []
+            channel.add_signal(Signal(name=name, data=this_data))
+        self.scope_panel.zoom_to_all()
+        self.scope_panel.Refresh()
+        del c3d_gui_window.scope_panel.channels[8:]
+
+    def event_button_interpret_click(self, _event):
+        data = interpret_data("incoming_data.c3d")
+        if data is None:
+            print("ERROR: no data in file")
+            return
+        print([x.get_length() for x in data])
+        # replace signal data with data from file
+        for index, this_data in enumerate(data):
+            channel = c3d_gui_window.scope_panel.channels[index]
+            name = channel.signals[0].name
+            channel.signals = []
+            channel.add_signal(Signal(name=name, data=this_data))
         self.scope_panel.zoom_to_all()
         self.scope_panel.Refresh()
         del c3d_gui_window.scope_panel.channels[8:]
@@ -312,7 +329,7 @@ class Packet:
         assert adc_count == 0
 
 
-def packets_to_channels(packets):
+def packets_to_signals(packets):
     """Process packets and return signals."""
     signal_count = 8
     # number of ticks per packet
@@ -324,6 +341,7 @@ def packets_to_channels(packets):
     deltas = [[] for _ in range(signal_count)]
     # hold a tick value just below what is expected in this cycle
     expected = -ticks_per_packet // 4
+    # print([x.channel_edges for x in packets[:3]])
     for packet_index, packet in enumerate(packets):
         # process each channel
         for channel_index, cycle in enumerate(packet.channel_edges):
@@ -333,20 +351,22 @@ def packets_to_channels(packets):
                 edges[channel_index].append(this_tick)
         expected += ticks_per_packet
     # add data to finish signals
-    print(deltas[0][:20])
-    print(deltas[1][:20])
     for i in range(signal_count):
         edges[i].append(len(packets) * ticks_per_packet)
-    print(edges[0][:20])
-    print(edges[1][:20])
+    # DEBUG
     print("Edges in each channel:", [len(x) - 2 for x in edges])
+    print([x[:10] for x in edges])
+    #    print("Edges in each channel:", [len(x) - 2 for x in edges])
     # process each signal into a BilevelData object
     signals = []
     for i in range(signal_count):
         data = BilevelData()
         data.start_time = 0.0
         data.start_high = False
-        data.data = edges[i]
+        if edges[i][:2] == [0, 0]:
+            del edges[i][0]
+            data.start_high = True
+        data.edges = edges[i]
         signals.append(data)
     return signals
 
@@ -413,7 +433,7 @@ def interpret_data(filename):
     # log data
     log_to_file = True
     # convert bilevel data
-    signals = packets_to_channels(packets)
+    signals = packets_to_signals(packets)
     return signals
 
 
@@ -453,4 +473,8 @@ def run_gui():
 
 
 if __name__ == "__main__":
+    # data = interpret_data("incoming_data - Copy.c3d")
+    # for i, x in enumerate(data):
+    #    x.validate()
+    # exit(0)
     run_gui()

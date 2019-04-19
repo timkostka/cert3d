@@ -33,7 +33,7 @@ all_signal_colors = [
 class Signal:
     """A Signal holds information about a scope signal."""
 
-    def __init__(self, name=None, color=wx.GREEN, thickness=3, data=None):
+    def __init__(self, name=None, color=wx.GREEN, thickness=1, data=None):
         # raw data
         assert isinstance(data, Data)
         # name of the signal
@@ -136,7 +136,7 @@ class ScopePanel(wx.Panel):
         # list of channels
         self.channels = []
         # maximum zoom level to 10 pixels per ns
-        self.maximum_pixels_per_second = asize(30) / 1e-9
+        self.maximum_pixels_per_second = asize(5) / 1e-9
         # minimum zoom level
         self.minimum_pixels_per_second = 0.0
         # index of selected channel, or None
@@ -261,10 +261,10 @@ class ScopePanel(wx.Panel):
                 data = TriStateData()
             else:
                 data = BilevelData()
-            data.invent_data(1000000)
+            data.invent_data(2000)
             signal = Signal(name=name, color=wx.GREEN, thickness=1, data=data)
             # create a channel for this signal
-            channel = ScopeChannel(height=30, signal=signal)
+            channel = ScopeChannel(height=40, signal=signal)
             # add this channel
             self.add_channel(channel)
 
@@ -602,6 +602,7 @@ class ScopePanel(wx.Panel):
         if right != left:
             self.pixels_per_second = (panel_width - 1) / (right - left)
         self.update_signal_zoom()
+        self.Refresh()
         return
         # TODO: find low and high value if this contains PlotData type signals
         for channel in self.channels:

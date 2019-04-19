@@ -34,6 +34,7 @@ def create_stipple_bitmap(color):
     stipple_brushes[rgb] = bmp
     return bmp
 
+
 '''
 def create_signal_cluster(
     data, pixels_per_screen=2000, max_edges_per_screen=500
@@ -497,6 +498,32 @@ class BilevelData(Data):
         # invent random data
         self.invent_data(10000)  # DEBUG
 
+    def validate(self):
+        """Raise an error is the data is invalid."""
+        # if empty, it's fine
+        if self.is_empty():
+            return True
+        # must have at least 2 points
+        assert self.get_point_count() >= 2
+        # ensure data points are ascending
+        check = all(
+            self.edges[i + 1] >= self.edges[i]
+            for i in range(len(self.edges) - 1)
+        )
+        if not check:
+            delta = [
+                self.edges[i + 1] >= self.edges[i]
+                for i in range(len(self.edges) - 1)
+            ]
+            indices = [i for i, x in enumerate(delta) if x <= 0]
+            print(indices)
+            print([self.edges[i - 1 : i + 2] for i in indices][:5])
+        # DEBUG
+        if not check:
+            self.edges.sort()
+        # assert check
+        return True
+
     def is_empty(self):
         """Return True if empty."""
         return not self.edges
@@ -642,10 +669,7 @@ class BilevelData(Data):
         if self.get_point_count() < 3:
             return
         # ensure data is monotonically increasing
-        assert all(
-            self.edges[i + 1] >= self.edges[i]
-            for i in range(len(self.edges) - 1)
-        )
+        self.validate()
         # find durations for consecutive pairs of edges
         durations = [y - x for x, y in zip(self.edges[:-2], self.edges[2:])]
         durations.sort()
