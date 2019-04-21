@@ -150,11 +150,13 @@ class AnalysisWindow(AnalysisWindowBase):
 
     def event_button_start_stream_click(self, _event):
         self.c3d_port_thread.log_to_file = True
+        self.c3d_port_thread.discard_data = False
         self.c3d_port_thread.open_port_automatically = True
         self.c3d_port_thread.send_command(b"start")
 
     def event_button_stop_stream_click(self, _event):
         self.c3d_port_thread.log_to_file = False
+        self.c3d_port_thread.discard_data = True
         self.c3d_port_thread.open_port_automatically = True
         self.c3d_port_thread.send_command(b"stop")
 
@@ -284,11 +286,9 @@ class InfoHeader:
             assert stop == "InfoStop"
             print(" - Success!")
             self.valid = True
-        except:
-            # AssertionError
-            print("ERROR: unable to read header")
+        except AssertionError:
+            print("ERROR: file is empty or has invalid header")
             self.valid = False
-            raise
 
     def is_valid(self):
         """Return True if the info is valid."""
@@ -333,8 +333,8 @@ def packets_to_signals(packets, header: InfoHeader):
     # number of ticks in a timer (before it rolls over)
     #cycle_count = 2 ** 16
     # hold edges for each signal
+    print('- Converting readings to per-signal lists')
     edges = [[0] for _ in range(header.signal_count)]
-    deltas = [[] for _ in range(header.signal_count)]
     # hold a tick value just below what is expected in this cycle
     #expected = -ticks_per_packet // 4
     # convert edges for each channel to another format
@@ -347,6 +347,7 @@ def packets_to_signals(packets, header: InfoHeader):
                 signal_ticks[channel_index].extend([(packet_index, delta)
                                                     for delta in cycle])
     # now process each channel
+    print('- Processing channels')
     for channel_index, ticks in enumerate(signal_ticks):
         # store range of deltas
         delta_values = []
@@ -367,8 +368,9 @@ def packets_to_signals(packets, header: InfoHeader):
         # add data to finish signals
         edges[channel_index].append(len(packets) * ticks_per_packet)
     # DEBUG
-    print("Edges in each channel:", [len(x) - 2 for x in edges])
-    print([x[:10] for x in edges])
+    print('- Done!')
+    print("- Edges in each channel:", [len(x) - 2 for x in edges])
+    # print([x[:10] for x in edges])
     #    print("Edges in each channel:", [len(x) - 2 for x in edges])
     # process each signal into a BilevelData object
     signals = []
@@ -426,10 +428,11 @@ class SlaveThread:
         """Create a new slave thread."""
         # if True, open the C3D port
         self.open_port_automatically = True
-        # if True, read data and clear buffer, but don't write it to a file
-        self.discard_data = False
         # if True, log to file
-        self.log_to_file = True
+        self.log_to_file = False
+        # if True, read data and clear buffer, but don't write it to a file
+        # the log_to_file setting overrides this
+        self.discard_data = True
         # if True, close all ports and files and exit
         self.exit_thread = False
         # USB serial port open with Cert3D board
@@ -472,8 +475,10 @@ class SlaveThread:
 
     def read_and_ignore_data(self):
         """Read and ignore data on the port until a command changes."""
-        while not self.exit_thread:
+        while self.serial_port and not self.exit_thread:
             if not self.open_port_automatically:
+                break
+            if self.log_to_file:
                 break
             if not self.discard_data:
                 break
@@ -492,13 +497,13 @@ class SlaveThread:
     def log_data_to_file(self):
         """Read and log data on the port until a command changes."""
         # open log file if it's not already open
-        if not self.log_file:
+        if self.serial_port and not self.log_file:
             self.log_file = open(self.log_filename, "bw")
         while not self.exit_thread:
             if not self.open_port_automatically:
                 break
-            if self.discard_data:
-                break
+            #if self.discard_data:
+            #    break
             if not self.log_to_file:
                 break
             # read data and log to file
@@ -580,10 +585,10 @@ class SlaveThread:
             if not self.serial_port:
                 continue
             # at this point, we need to do
-            if self.discard_data:
-                self.read_and_ignore_data()
-            elif self.log_to_file:
+            if self.log_to_file:
                 self.log_data_to_file()
+            elif self.discard_data:
+                self.read_and_ignore_data()
             # log file shouldn't be open
             assert not self.log_file
         print("Slave thread is dying!")

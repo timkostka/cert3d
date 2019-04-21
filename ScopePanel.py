@@ -12,7 +12,7 @@ from dpi import asize
 from Data import *
 
 # maximum edges per screen
-max_points_per_screen = 500
+max_points_per_screen = 2000
 
 # screen size in pixels
 screen_size = 1000
@@ -62,7 +62,7 @@ class Signal:
             min_pixels_per_second = screen_size / min_seconds
             self.data_cluster[i][0] = min_pixels_per_second
         # DEBUG
-        if True:
+        if False:
             print([(x[1].get_point_count(), x[0]) for x in self.data_cluster])
         # set min zoom level of most simplified set to 0
         self.data_cluster[-1][0] = 0.0
@@ -388,7 +388,7 @@ class ScopePanel(wx.Panel):
         closest_time = None
         # find the closest x value for each signal within the channel
         for signal_index, signal in enumerate(channel.signals):
-            this_time = signal.data.get_closest_time(target_time)
+            this_time = signal.active_data.get_edge_near_time(target_time)
             if this_time is not None:
                 this_delta = abs(this_time - target_time)
                 if closest_time is None or this_delta < best_delta:
@@ -397,7 +397,7 @@ class ScopePanel(wx.Panel):
         if closest_time is None:
             return None
         # find delta in pixels
-        pixel_delta = int(best_delta / self.seconds_per_pixel + 0.5)
+        pixel_delta = int(best_delta * self.pixels_per_second + 0.5)
         if abs(pixel_delta) < self.snap_distance:
             return closest_time
         return None
