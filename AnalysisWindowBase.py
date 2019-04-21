@@ -148,10 +148,10 @@ class AnalysisWindowBase(wx.Frame):
         )
         bSizer52.Add(self.button_debug_2, 0, wx.ALL, 5)
 
-        self.button_debug_3 = wx.Button(
-            self, wx.ID_ANY, u"Debug 3", wx.DefaultPosition, wx.DefaultSize, 0
+        self.button_trim = wx.Button(
+            self, wx.ID_ANY, u"Trim", wx.DefaultPosition, wx.DefaultSize, 0
         )
-        bSizer52.Add(self.button_debug_3, 0, wx.ALL, 5)
+        bSizer52.Add(self.button_trim, 0, wx.ALL, 5)
 
         self.button_reset = wx.Button(
             self,
@@ -255,9 +255,7 @@ class AnalysisWindowBase(wx.Frame):
         self.button_debug_2.Bind(
             wx.EVT_BUTTON, self.event_button_debug_2_click
         )
-        self.button_debug_3.Bind(
-            wx.EVT_BUTTON, self.event_button_debug_3_click
-        )
+        self.button_trim.Bind(wx.EVT_BUTTON, self.event_button_trim_click)
         self.button_reset.Bind(wx.EVT_BUTTON, self.event_button_reset_click)
         self.button_clear_log.Bind(
             wx.EVT_BUTTON, self.event_button_clear_log_click
@@ -306,7 +304,7 @@ class AnalysisWindowBase(wx.Frame):
     def event_button_debug_2_click(self, event):
         event.Skip()
 
-    def event_button_debug_3_click(self, event):
+    def event_button_trim_click(self, event):
         event.Skip()
 
     def event_button_reset_click(self, event):

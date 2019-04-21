@@ -155,7 +155,14 @@ class Data:
     def is_empty(self):
         """Return True if empty."""
         return self.get_point_count() == 0
-        #raise NotImplementedError
+
+    def get_x_from_time(self, time):
+        """Return the x value corresponding to the given time."""
+        return (time - self.start_time) / self.seconds_per_tick
+
+    def get_time_at_index(self, index):
+        """Return time at the given point index."""
+        raise NotImplementedError
 
     def get_point_count(self):
         """Return the number of data points in this set."""
@@ -163,7 +170,9 @@ class Data:
 
     def get_length(self):
         """Return the length of the data."""
-        raise NotImplementedError
+        if self.is_empty():
+            return None
+        return self.get_time_at_index(-1) - self.get_time_at_index(0)
 
     def get_edge_near_time(self, time):
         """Should return the time closest to the given time, or None."""
@@ -219,12 +228,6 @@ class TriStateData(Data):
     def get_point_count(self):
         """Return the number of data points in this set."""
         return len(self.points)
-
-    def get_length(self):
-        """Return the length of the data in seconds, or None."""
-        if self.is_empty():
-            return None
-        return self.get_time_at_index(-1) - self.get_time_at_index(0)
 
     def get_edge_near_time(self, target_time):
         """Return the edge time closest to the target time, or None."""
@@ -503,12 +506,6 @@ class BilevelData(Data):
         """Return the number of data points in this set."""
         return len(self.edges)
 
-    def get_length(self):
-        """Return the length of the data in seconds, or None."""
-        if self.is_empty():
-            return None
-        return self.get_time_at_index(-1) - self.get_time_at_index(0)
-
     def invent_data(self, length=200):
         """Populate with randomly generated data."""
         self.start_high = random.choice([True, False])
@@ -711,12 +708,6 @@ class PlotData(Data):
 
     def get_point_count(self):
         return len(self.points)
-
-    def get_length(self):
-        """Return the length of the data in seconds."""
-        if not self.points:
-            return 0
-        return self.points[-1][0] * self.seconds_per_tick
 
     def invent_data(self, point_count=2000):
         """Populate with randomly generated data."""

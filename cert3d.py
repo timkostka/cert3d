@@ -105,7 +105,7 @@ def derivate_data(data: PlotData, idle_corrections=False):
 
 
 def decode_stepper(
-    step_data: BilevelData, dir_data: BilevelData, idle_corrections=False
+    step_data: BilevelData, dir_data: BilevelData, idle_corrections=True
 ):
     """Given the STEP and DIR channels, return step position as a PlotData."""
     # ensure the channels match in start and duration
@@ -314,6 +314,9 @@ class AnalysisWindow(AnalysisWindowBase):
             self.static_text_usb_port_status.SetLabel(port_name)
         if data_rate != self.static_text_data_rate.GetLabel():
             self.static_text_data_rate.SetLabel(data_rate)
+
+    def event_button_trim_click(self, _event):
+        self.scope_panel.trim_signals()
 
 
 class InfoHeader:

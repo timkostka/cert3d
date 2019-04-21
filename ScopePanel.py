@@ -48,7 +48,13 @@ class Signal:
         self.start_time = data.start_time
         # data cluster
         self.data_cluster = [[0, data]]
+
+    def create_simplified_data_sets(self):
+        """Create simplified data sets."""
         # create simplified data sets
+        if len(self.data_cluster) > 1:
+            del self.data_cluster[1:]
+        data = self.get_master_data()
         while data.get_point_count() > max_points_per_screen:
             new_data = data.get_reduced_data()
             if new_data is None:
@@ -82,9 +88,9 @@ class Signal:
 
     def get_start_time(self):
         """Return the start time of the signal data in seconds."""
-        if not self.active_data:
+        if not self.active_data or self.active_data.is_empty():
             return 0.0
-        return self.active_data.start_time
+        return self.active_data.get_time_at_index(0)
 
     def get_length(self):
         """Return the length of the signal data in seconds."""
@@ -100,7 +106,6 @@ class Signal:
 
 
 class ScopeChannel:
-
     def __init__(self, height=30, low_value=0.0, high_value=1.0, signal=None):
         # height of channel in pixels
         self.height = height
@@ -237,7 +242,7 @@ class ScopePanel(wx.Panel):
 
         self.adjust_channel_name_size()
 
-        #self.zoom_to_all()
+        # self.zoom_to_all()
 
         # DEBUG populate sample data
         self.populate_example_data()
@@ -617,8 +622,8 @@ class ScopePanel(wx.Panel):
                 if channel.low_value == channel.high_value:
                     channel.high_value = channel.low_value + 1e99
 
-    def trim_channels(self, idle_ms=100):
-        """Trim inactiviy from the start and end of the signals."""
+    def trim_signals(self, idle_ms=100):
+        """Trim inactivity from the start and end of all signals."""
         # get first time of activity
         first_activity = []
         last_activity = []
@@ -627,6 +632,64 @@ class ScopePanel(wx.Panel):
                 data = signal.get_master_data()
                 if data.get_point_count() < 2:
                     continue
+                if isinstance(data, PlotData):
+                    if data.points[0][1] == data.points[1][1]:
+                        first_activity.append(data.get_time_at_index(1))
+                    else:
+                        first_activity.append(data.get_time_at_index(0))
+                    if data.points[-1][1] == data.points[-2][1]:
+                        last_activity.append(data.get_time_at_index(-2))
+                    else:
+                        last_activity.append(data.get_time_at_index(-1))
+                elif isinstance(data, BilevelData):
+                    first_activity.append(data.get_time_at_index(1))
+                    last_activity.append(data.get_time_at_index(-1))
+                elif isinstance(data, TriStateData):
+                    first_activity.append(data.get_time_at_index(1))
+                    last_activity.append(data.get_time_at_index(-1))
+                else:
+                    raise ValueError("type %s is unexptected" % type(data))
+        # find values to trim to
+        if first_activity:
+            start_time = min(first_activity) - idle_ms / 1000.0
+        else:
+            start_time = None
+        if last_activity:
+            end_time = max(last_activity) + idle_ms / 1000.0
+        else:
+            end_time = None
+        if start_time > end_time:
+            return
+        # trim start
+        if start_time:
+            for channel in self.channels:
+                for signal in channel.signals:
+                    data = signal.get_master_data()
+                    if (
+                        data.is_empty()
+                        or data.get_time_at_index(0) > start_time
+                    ):
+                        continue
+                    tick = data.get_x_from_time(start_time)
+                    if isinstance(data, BilevelData):
+                        data.edges[0] = tick
+                    else:
+                        data.points[0] = (tick, data.points[0][1])
+        if end_time:
+            for channel in self.channels:
+                for signal in channel.signals:
+                    data = signal.get_master_data()
+                    if (
+                        data.is_empty()
+                        or data.get_time_at_index(-1) < end_time
+                    ):
+                        continue
+                    tick = data.get_x_from_time(end_time)
+                    if isinstance(data, BilevelData):
+                        data.edges[-1] = tick
+                    else:
+                        data.points[-1] = (tick, data.points[-1][1])
+        self.Refresh()
 
     @staticmethod
     def time_to_text(time_s):
@@ -967,14 +1030,3 @@ class ScopePanel(wx.Panel):
             signal.color = color
         # redraw the screen
         self.Refresh()
-
-    def trim_data(self, dead_duration=0.001):
-        """Trim data to have less deadtime at the beginning and end."""
-        raise NotImplementedError
-        # count deadtime at start and end of each signal
-        deadtime_start = []
-        deadtime_end = []
-        for channel in self.channels:
-            for signal in channel.signals:
-                pass
-        pass
