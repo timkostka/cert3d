@@ -51,6 +51,8 @@ class Signal:
         # create simplified data sets
         while data.get_point_count() > max_points_per_screen:
             new_data = data.get_reduced_data()
+            if new_data is None:
+                break
             self.data_cluster.append([0, new_data])
             data = new_data
         # find zoom levels for each set
@@ -95,14 +97,15 @@ class Signal:
 
 
 class ScopeChannel:
+
     def __init__(self, height=30, low_value=0.0, high_value=1.0, signal=None):
         # height of channel in pixels
         self.height = height
         # value at low end of channel
-        # (not used for bilevel channels)
+        # (not used for bilevel or tristate signals)
         self.low_value = None
         # value at high end of channel
-        # (not used for bilevel channels)
+        # (not used for bilevel or tristate signals)
         self.high_value = None
         # signals within this scope channel
         self.signals = []
@@ -231,7 +234,7 @@ class ScopePanel(wx.Panel):
 
         self.adjust_channel_name_size()
 
-        self.zoom_to_all()
+        #self.zoom_to_all()
 
         # DEBUG populate sample data
         self.populate_example_data()
@@ -269,19 +272,10 @@ class ScopePanel(wx.Panel):
             self.add_channel(channel)
 
         for name in ["X_POS", "Y_POS", "Z_POS", "E_POS"]:
-            break
-            channel = ScopeChannel(data)
-            channel.add_signal(Signal(data))
-            channel.signals[-1].name = name
-            channel.signals[-1].color = wx.RED  # random.choice(all_colors)
-            channel.signals[-1].thickness = random.randint(1, 1)
-            channel.height = random.randint(asize(80), asize(80))
-            data2 = PlotData()
-            signal2 = Signal(data2)
-            signal2.name = name + "2"
-            signal2.color = wx.CYAN  # random.choice(all_colors)
-            signal2.thickness = random.randint(1, 1)
-            channel.add_signal(signal2)
+            data = PlotData()
+            data.invent_data(2000)
+            signal = Signal(name=name, color=wx.CYAN, thickness=1, data=data)
+            channel = ScopeChannel(height=120, signal=signal)
             self.add_channel(channel)
 
     def adjust_channel_name_size(self):
@@ -603,15 +597,17 @@ class ScopePanel(wx.Panel):
             self.pixels_per_second = (panel_width - 1) / (right - left)
         self.update_signal_zoom()
         self.Refresh()
-        return
-        # TODO: find low and high value if this contains PlotData type signals
         for channel in self.channels:
             low_values = []
             high_values = []
             for signal in channel.signals:
-                if isinstance(signal.data, PlotData) and signal.data.data:
-                    low_values.append(min(x[1] for x in signal.data.data))
-                    high_values.append(max(x[1] for x in signal.data.data))
+                data = signal.active_data
+                if not isinstance(data, PlotData):
+                    continue
+                if data.is_empty():
+                    continue
+                low_values.append(min(x[1] for x in data.points))
+                high_values.append(max(x[1] for x in data.points))
             if low_values:
                 channel.low_value = min(low_values)
                 channel.high_value = max(high_values)
@@ -811,6 +807,8 @@ class ScopePanel(wx.Panel):
                     signal.thickness,
                     self.start_time,
                     self.pixels_per_second,
+                    channel.low_value,
+                    channel.high_value,
                 )
                 continue
                 if isinstance(signal.data, BilevelData):
@@ -953,3 +951,14 @@ class ScopePanel(wx.Panel):
             signal.color = color
         # redraw the screen
         self.Refresh()
+
+    def trim_data(self, dead_duration=0.001):
+        """Trim data to have less deadtime at the beginning and end."""
+        raise NotImplementedError
+        # count deadtime at start and end of each signal
+        deadtime_start = []
+        deadtime_end = []
+        for channel in self.channels:
+            for signal in channel.signals:
+                pass
+        pass

@@ -273,8 +273,10 @@ class InfoHeader:
                 overflow = struct.unpack("L", file.read(4))[0]
                 self.signal_frequencies.append(clock)
                 self.signal_overflow_ticks.append(overflow)
-                print('  - Signal channel %d: clock=%d Hz, overflow=%d ticks'
-                      % (i + 1, clock, overflow))
+                print(
+                    "  - Signal channel %d: clock=%d Hz, overflow=%d ticks"
+                    % (i + 1, clock, overflow)
+                )
             self.adc_ranges = [
                 (
                     struct.unpack("f", file.read(4))[0],
@@ -325,18 +327,16 @@ def packets_to_signals(packets, header: InfoHeader):
     ]
     assert len(set(ticks_per_overflow)) == 1
     # get system ticks per packet
-    system_ticks_per_packet = header.system_clock * header.signal_overflow_ticks[0] / header.signal_frequencies[0] / 2
+    system_ticks_per_packet = (
+        header.system_clock
+        * header.signal_overflow_ticks[0]
+        / header.signal_frequencies[0]
+        / 2
+    )
     assert system_ticks_per_packet == int(system_ticks_per_packet)
     system_ticks_per_packet = int(system_ticks_per_packet)
-    # number of ticks per packet
-    #ticks_per_packet = 2 ** 15
-    # number of ticks in a timer (before it rolls over)
-    #cycle_count = 2 ** 16
-    # hold edges for each signal
-    print('- Converting readings to per-signal lists')
+    print("- Converting readings to per-signal lists")
     edges = [[0] for _ in range(header.signal_count)]
-    # hold a tick value just below what is expected in this cycle
-    #expected = -ticks_per_packet // 4
     # convert edges for each channel to another format
     # signal_ticks[0] = [(cycle1, value1), (cycle2, value2), etc...]
     signal_ticks = [[] for _ in range(header.signal_count)]
@@ -344,15 +344,20 @@ def packets_to_signals(packets, header: InfoHeader):
         # process each channel
         for channel_index, cycle in enumerate(packet.channel_edges):
             if cycle:
-                signal_ticks[channel_index].extend([(packet_index, delta)
-                                                    for delta in cycle])
+                signal_ticks[channel_index].extend(
+                    [(packet_index, delta) for delta in cycle]
+                )
     # now process each channel
-    print('- Processing channels')
+    print("- Processing channels")
     for channel_index, ticks in enumerate(signal_ticks):
         # store range of deltas
         delta_values = []
         # get timer ticks per packet
-        ticks_per_packet = system_ticks_per_packet * header.signal_frequencies[channel_index] // header.system_clock
+        ticks_per_packet = (
+            system_ticks_per_packet
+            * header.signal_frequencies[channel_index]
+            // header.system_clock
+        )
         expected_offset = -ticks_per_packet // 16
         # get overflow
         overflow = 2 * ticks_per_packet
@@ -364,11 +369,19 @@ def packets_to_signals(packets, header: InfoHeader):
             this_tick = expected + delta_from_expected
             edges[channel_index].append(this_tick)
         if delta_values:
-            print('expected=%d, overflow=%d, delta min=%d, max=%d' % (expected_offset, overflow, min(delta_values) + expected_offset, max(delta_values) + expected_offset))
+            print(
+                "expected=%d, overflow=%d, delta min=%d, max=%d"
+                % (
+                    expected_offset,
+                    overflow,
+                    min(delta_values) + expected_offset,
+                    max(delta_values) + expected_offset,
+                )
+            )
         # add data to finish signals
         edges[channel_index].append(len(packets) * ticks_per_packet)
     # DEBUG
-    print('- Done!')
+    print("- Done!")
     print("- Edges in each channel:", [len(x) - 2 for x in edges])
     # print([x[:10] for x in edges])
     #    print("Edges in each channel:", [len(x) - 2 for x in edges])
@@ -502,7 +515,7 @@ class SlaveThread:
         while not self.exit_thread:
             if not self.open_port_automatically:
                 break
-            #if self.discard_data:
+            # if self.discard_data:
             #    break
             if not self.log_to_file:
                 break

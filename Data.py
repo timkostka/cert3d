@@ -176,6 +176,8 @@ class Data:
         thickness: int,
         left_time: float,
         pixels_per_second: float,
+        low_value: float,
+        high_value: float,
     ):
         """Draw the signal on the screen."""
         raise NotImplementedError
@@ -187,46 +189,6 @@ class Data:
     def get_reduced_data(self):
         """Approximate the data with a reduced set and return it."""
         raise NotImplementedError
-
-
-class PlotData:
-    """The PlotData class holds xy plot data for a given signal."""
-
-    def __init__(self):
-        # name of the data
-        self.name = "DATA"
-        # number of ticks per second
-        self.seconds_per_tick = 1.0 / 180e6
-        # starting time in seconds
-        self.start_time = 0.0
-        # xy plot data, where x is in ticks
-        self.data = []
-        self.invent_data()  # DEBUG
-
-    def get_length(self):
-        """Return the length of the data in seconds."""
-        if not self.data:
-            return 0
-        return self.data[-1][0] * self.seconds_per_tick
-
-    def invent_data(self):
-        """Populate with randomly generated data."""
-        self.start_time = 0.0
-        phi = random.uniform(0.0, math.tau)
-        period = random.uniform(20, 40)
-        for i in range(12000):
-            self.data.append((5 * i, math.sin(phi + i * math.tau / period)))
-
-    def get_closest_time(self, target_time):
-        """Return the edge time closest to the target time, or None."""
-        if len(self.data) == 0:
-            return None
-        time = self.start_time
-        for tick_count, _ in self.data:
-            this_time = self.start_time + tick_count * self.seconds_per_tick
-            if abs(this_time - target_time) < abs(time - target_time):
-                time = this_time
-        return time
 
 
 class TriStateData(Data):
@@ -343,7 +305,15 @@ class TriStateData(Data):
             self.points.append((tick_count, new_value))
 
     def draw_signal(
-        self, dc, rect, color, thickness, left_time, pixels_per_second
+        self,
+        dc,
+        rect,
+        color,
+        thickness,
+        left_time,
+        pixels_per_second,
+        low_value,
+        high_value,
     ):
         """Draw the signal on the screen."""
         # if it's empty, nothing to draw
@@ -614,7 +584,15 @@ class BilevelData(Data):
         return self.get_time_at_index(index)
 
     def draw_signal(
-        self, dc, rect, color, thickness, left_time, pixels_per_second
+        self,
+        dc,
+        rect,
+        color,
+        thickness,
+        left_time,
+        pixels_per_second,
+        low_value,
+        high_value,
     ):
         """Draw the signal on the screen."""
         # if it's empty, nothing to draw
@@ -709,3 +687,134 @@ class BilevelData(Data):
         new_data.points = new_points
         new_data.validate()
         return new_data
+
+
+class PlotData(Data):
+    """The PlotData class holds xy plot data for a given signal."""
+
+    def __init__(self):
+        # call higher level init
+        super(PlotData, self).__init__()
+        # name of the data
+        self.name = "DATA"
+        # number of ticks per second
+        self.seconds_per_tick = 1.0 / 168e6
+        # starting time in seconds
+        self.start_time = 0.0
+        # xy plot data, where x is in ticks
+        self.points = []
+        self.invent_data()  # DEBUG
+
+    def is_empty(self):
+        return not self.points
+
+    def get_point_count(self):
+        return len(self.points)
+
+    def get_length(self):
+        """Return the length of the data in seconds."""
+        if not self.points:
+            return 0
+        return self.points[-1][0] * self.seconds_per_tick
+
+    def invent_data(self, point_count=2000):
+        """Populate with randomly generated data."""
+        self.start_time = 0.0
+        phi = random.uniform(0.0, math.tau)
+        period = random.uniform(20, 40)
+        self.points = []
+        for i in range(point_count):
+            self.points.append((5 * i, math.sin(phi + i * math.tau / period)))
+
+    def get_closest_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        return None
+
+    def get_min_period_with_point_count(self, point_count):
+        """Return the minimum period in seconds with X points."""
+        # TODO: implement this
+        return float("inf")
+
+    def get_reduced_data(self):
+        """Approximate the data with a reduced set and return it."""
+        return None
+
+    def draw_signal(
+        self,
+        dc,
+        rect,
+        color,
+        thickness,
+        left_time,
+        pixels_per_second,
+        low_value,
+        high_value,
+    ):
+        """Draw the signal on the screen."""
+        # if it's empty, nothing to draw
+        if self.is_empty():
+            return
+        # set clipping region
+        dc.SetClippingRegion(*rect)
+        # set pen
+        dc.SetPen(wx.Pen(color, thickness))
+        # get pixels per tick (x scaling)
+        pixels_per_tick = self.seconds_per_tick * pixels_per_second
+        # x pixel of start of channel data
+        channel_left = (
+            rect[0]
+            + (self.start_time - left_time) * pixels_per_second
+        )
+        # alias some things to shorter names
+        top = rect[1]
+        bottom = rect[1] + rect[3] - 1
+        height = rect[3]
+        width = rect[2]
+        left = rect[0]
+        right = left + width - 1
+        # get pixels per value (y scaling)
+        pixels_per_value = (height - 1) / (low_value - high_value)
+        x2 = None
+        y2 = None
+        for point in self.points:
+            x1, y1 = x2, y2
+            x2 = int(channel_left + point[0] * pixels_per_tick + 0.5)
+            y2 = int(top + (point[1] - high_value) * pixels_per_value + 0.5)
+            # exit if we're drawing offscreen
+            if x1 is None:
+                continue
+            if x1 > right:
+                break
+            #if x2 >= left:
+            dc.DrawLine(x1, y1, x2, y2)
+        dc.DestroyClippingRegion()
+        return
+
+
+        # find first index to left of window
+        index = self.find_index_after(left_time)
+        if index > 0:
+            index -= 1
+        # find first index to the right of the window
+        right_index = self.find_index_after(
+            left_time + width / pixels_per_second
+        )
+        # get the correct signal polarity
+        if index % 2 == 1:
+            signal_low = not signal_low
+        # get time at the index
+        time = self.get_time_at_index(index)
+        x2 = left + round((time - left_time) * pixels_per_second)
+        for _ in range(right_index - index):
+            x1 = x2
+            # draw transition on leading edge
+            if index > 0:
+                dc.DrawRectangle(x1, y1, thickness, height)
+            # go to the next value
+            index += 1
+            signal_low = not signal_low
+            time = self.get_time_at_index(index)
+            x2 = left + round((time - left_time) * pixels_per_second)
+            y = y2 - thickness + 1 if signal_low else y1
+            dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
+        dc.DestroyClippingRegion()
