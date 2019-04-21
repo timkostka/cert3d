@@ -69,6 +69,9 @@ class Signal:
         # set min zoom level of most simplified set to 0
         self.data_cluster[-1][0] = 0.0
 
+    def get_master_data(self):
+        return self.data_cluster[0][1]
+
     def is_empty(self):
         """Return True if the signal is empty."""
         return bool(self.data_cluster)
@@ -118,7 +121,7 @@ class ScopeChannel:
 
     def draw(self, dc):
         """Draw the channel clipped to the given rectangle DC."""
-        pass
+        raise NotImplementedError
 
 
 class ScopePanel(wx.Panel):
@@ -611,6 +614,8 @@ class ScopePanel(wx.Panel):
             if low_values:
                 channel.low_value = min(low_values)
                 channel.high_value = max(high_values)
+                if channel.low_value == channel.high_value:
+                    channel.high_value = channel.low_value + 1e99
 
     @staticmethod
     def time_to_text(time_s):

@@ -61,39 +61,108 @@ verbose = True
 c3d_log_filename = "c3d_data.bin"
 
 
-def decode_stepper(step_channel: BilevelData, dir_channel: BilevelData):
-    """Given the STEP and DIR channels, return position."""
-    raise NotImplementedError
-    time = step_channel.start_time == dir_channel.start_time
-    dir_is_up = dir_channel.start_high
-    # get microstep vs time
-    data = []
-    data.append((0, 0))
+def derivate_data(data: PlotData, idle_corrections=False):
+    """Return the derivative of the given data."""
+    points = [(data.points[0][0], 0)]
+    for p1, p2 in zip(data.points[:-1], data.points[1:]):
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        if dx == 0:
+            dx = 1
+            dy = 0
+        points.append((p2[0], dy / dx))
+    # Note: the data above is taken by averaging over the distance between
+    # active edges.  When this is a large value, such as when the stepper is at
+    # rest and begins to move, it can produce misleading data.  To avoid this,
+    # we reduce the duration in cases where the stepper motion is very slow.
+    if idle_corrections:
+        durations = [y[0] - x[0] for x, y in zip(points[:-1], points[1:])]
+        durations.sort()
+        cutoff = durations[len(durations) // 2] * 5
+        # cutoff = max(x for x in durations if x <= cutoff)
+        i = 0
+        while i < len(points) - 1:
+            i += 1
+            duration = points[i][0] - points[i - 1][0]
+            if duration <= 2 * cutoff:
+                continue
+            if points[i][1] == points[i - 1][1]:
+                continue
+            print(i, duration, cutoff, duration / cutoff)
+            # add ramp down
+            if points[i - 1][1] == 0:
+                points.insert(i, (points[i][0] - cutoff, 0.0))
+                i += 1
+            # add ramp up
+            if points[i][1] == 0:
+                points.insert(i, (points[i - 1][0] + cutoff, 0.0))
+                i += 1
+    new_data = PlotData()
+    new_data.start_time = data.start_time
+    new_data.seconds_per_tick = data.seconds_per_tick
+    new_data.points = points
+    return new_data
+
+
+def decode_stepper(step_data: BilevelData, dir_data: BilevelData, idle_corrections=False):
+    """Given the STEP and DIR channels, return step position as a PlotData."""
+    # ensure the channels match in start and duration
+    assert step_data.start_time == dir_data.start_time
+    assert step_data.get_length() == dir_data.get_length()
+    assert step_data.seconds_per_tick == dir_data.seconds_per_tick
+    # hold step vs position
+    points = []
+    points.append((0, 0))
     steps = 0
     # loop through until we reach the end of either stream
     try:
-        dir_it = iter(dir_channel.data)
-        dir_is_low = not dir_channel.start_high
-        remaining_dir_ticks = next(dir_it)
-        assert step_channel.start_high is False
-        step_is_low = not step_channel.start_high
-        ticks = 0
-        for pulse in step_channel.data:
-            ticks += pulse
+        # read first dir tick
+        dir_it = iter(dir_data.edges)
+        dir_tick = next(dir_it)
+        # value of the DIR channel before dir_tick
+        dir_is_low = dir_data.start_high
+        # value of STEP channel
+        step_is_low = not step_data.start_high
+        for step_tick in step_data.edges[1:-1]:
             step_is_low = not step_is_low
-            remaining_dir_ticks -= pulse
-            while remaining_dir_ticks < 0:
+            # advance dir until we're past the step tick
+            while dir_tick < step_tick:
+                dir_tick = next(dir_it)
                 dir_is_low = not dir_is_low
-                remaining_dir_ticks += next(dir_it)
-            # if we transitioned high, increase or decrease step
-            if dir_is_low:
-                steps -= 1
-            else:
-                steps += 1
-            data.append((ticks, steps))
+            # if STEP transitioned from low to high, increase or decrease pos
+            if not step_is_low:
+                if dir_is_low:
+                    steps -= 1
+                else:
+                    steps += 1
+                points.append((step_tick, steps))
     except StopIteration:
         pass
-    return data
+    # add last value
+    points.append((step_data.edges[-1], steps))
+    if idle_corrections:
+        # Note: the data above is taken by averaging over the distance between
+        # active edges.  When this is a large value, such as when the stepper
+        # is at rest and begins to move, it can produce misleading data.  To
+        # avoid this, we reduce the duration in cases where the stepper motion
+        # is very slow.
+        durations = [y[0] - x[0] for x, y in zip(points[:-1], points[1:])]
+        durations.sort()
+        cutoff = durations[len(durations) // 2] * 5
+        # cutoff = min(x for x in durations if x <= cutoff)
+        i = 0
+        while i < len(points) - 1:
+            i += 1
+            duration = points[i][0] - points[i - 1][0]
+            if duration <= 2 * cutoff:
+                continue
+            points.insert(i, (points[i][0] - cutoff, points[i - 1][1]))
+            i += 1
+    # create PlotData object
+    pos = PlotData()
+    pos.seconds_per_tick = step_data.seconds_per_tick
+    pos.points = points
+    return pos
 
 
 def find_c3d_ports():
@@ -185,9 +254,11 @@ class AnalysisWindow(AnalysisWindowBase):
             name = channel.signals[0].name
             channel.signals = []
             channel.add_signal(Signal(name=name, data=this_data))
+        # create step channels if possible
+        del c3d_gui_window.scope_panel.channels[8:]
+        postprocess_signals(self.scope_panel)
         self.scope_panel.zoom_to_all()
         self.scope_panel.Refresh()
-        del c3d_gui_window.scope_panel.channels[8:]
 
     def event_button_interpret_click(self, _event):
         # stop streaming and close file
@@ -206,9 +277,10 @@ class AnalysisWindow(AnalysisWindowBase):
             name = channel.signals[0].name
             channel.signals = []
             channel.add_signal(Signal(name=name, data=this_data))
+        del c3d_gui_window.scope_panel.channels[8:]
+        postprocess_signals(self.scope_panel)
         self.scope_panel.zoom_to_all()
         self.scope_panel.Refresh()
-        del c3d_gui_window.scope_panel.channels[8:]
 
     def event_timer_update_ui(self, _event):
         # noinspection PyUnusedLocal
@@ -358,7 +430,7 @@ def packets_to_signals(packets, header: InfoHeader):
             * header.signal_frequencies[channel_index]
             // header.system_clock
         )
-        expected_offset = -ticks_per_packet // 16
+        expected_offset = -ticks_per_packet // 8
         # get overflow
         overflow = 2 * ticks_per_packet
         assert overflow == header.signal_overflow_ticks[channel_index]
@@ -378,6 +450,13 @@ def packets_to_signals(packets, header: InfoHeader):
                     max(delta_values) + expected_offset,
                 )
             )
+        # adjust edges so no edge is negative:
+        for i in range(1, len(edges[channel_index])):
+            while edges[channel_index][i] < edges[channel_index][i - 1]:
+                print('WARNING: adjusted edge to make it non-negative')
+                print('         possibly something is out of sync')
+                print('         restarting may fix')
+                edges[channel_index][i] += overflow
         # add data to finish signals
         edges[channel_index].append(len(packets) * ticks_per_packet)
     # DEBUG
@@ -397,6 +476,31 @@ def packets_to_signals(packets, header: InfoHeader):
         data.edges = edges[i]
         signals.append(data)
     return signals
+
+
+def postprocess_signals(scope_panel: ScopePanel):
+    """Postprocess step position from the DIR and STEP channels."""
+    all_signals = dict()
+    for channel in scope_panel.channels:
+        for signal in channel.signals:
+            all_signals[signal.name] = signal.get_master_data()
+    # find all channels with both a *_STEP and *_DIR signal
+    names = [x[:-5] for x in all_signals.keys() if x.endswith('_STEP')]
+    names = [x for x in names if x + '_DIR' in all_signals.keys()]
+    # postprocess each one
+    new_signals = []
+    for name in names:
+        step_data = all_signals[name + '_STEP']
+        dir_data = all_signals[name + '_DIR']
+        pos_data = decode_stepper(step_data, dir_data)
+        vel_data = derivate_data(pos_data)
+        acc_data = derivate_data(vel_data)
+        new_signals.append(Signal(name + '_POS', wx.CYAN, 1, pos_data))
+        new_signals.append(Signal(name + '_VEL', wx.CYAN, 1, vel_data))
+        new_signals.append(Signal(name + '_ACC', wx.CYAN, 1, acc_data))
+    # add new channels for the new signals
+    for signal in new_signals:
+        scope_panel.add_channel(ScopeChannel(height=120, signal=signal))
 
 
 def interpret_data(filename):

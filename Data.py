@@ -522,6 +522,19 @@ class BilevelData(Data):
                 tick_count += 2000 * round(1.0 + 5.0 * random.random())
             self.edges.append(tick_count)
 
+    def get_min_period_with_point_count(self, point_count):
+        """Return the minimum period in seconds with X points."""
+        assert point_count > 1
+        if self.get_point_count() <= point_count:
+            return float("inf")
+        ticks = min(
+            y - x
+            for x, y in zip(
+                self.edges[:-point_count], self.edges[point_count:]
+            )
+        )
+        return ticks * self.seconds_per_tick
+
     def find_index_after(self, target_time):
         """Return the first index at or after the given time."""
         if not self.edges:
@@ -543,19 +556,6 @@ class BilevelData(Data):
     def get_time_at_index(self, index):
         """Return the time at the given data index."""
         return self.start_time + self.edges[index] * self.seconds_per_tick
-
-    def get_min_period_with_point_count(self, point_count):
-        """Return the minimum period in seconds with X points."""
-        assert point_count > 1
-        if self.get_point_count() <= point_count:
-            return float("inf")
-        ticks = min(
-            y - x
-            for x, y in zip(
-                self.edges[:-point_count], self.edges[point_count:]
-            )
-        )
-        return ticks * self.seconds_per_tick
 
     def find_closest_index(self, target_time):
         """Return the data index closest to the given time."""
@@ -818,3 +818,51 @@ class PlotData(Data):
             y = y2 - thickness + 1 if signal_low else y1
             dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
+
+    def get_time_at_index(self, index):
+        """Return the time at the given data index."""
+        return self.start_time + self.points[index][0] * self.seconds_per_tick
+
+    def find_index_after(self, target_time):
+        """Return the first index at or after the given time."""
+        if not self.points:
+            return None
+        low = 0
+        high = len(self.points) - 1
+        # loop until low and high are adjacent
+        while low < high:
+            test = (low + high) // 2
+            time = self.get_time_at_index(test)
+            if time < target_time:
+                assert low < test + 1
+                low = test + 1
+            else:
+                assert high > test
+                high = test
+        return low
+
+    def find_closest_index(self, target_time):
+        """Return the data index closest to the given time."""
+        if not self.points:
+            return None
+        if target_time < self.start_time:
+            return 0
+        index = self.find_index_after(target_time)
+        if index is None:
+            return self.get_point_count() -1
+        # else it's either index or index - 1
+        if index == 0:
+            return index
+        low = self.get_time_at_index(index - 1)
+        high = self.get_time_at_index(index)
+        if abs(target_time - low) < abs(target_time - high):
+            return index - 1
+        else:
+            return index
+
+    def get_edge_near_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        index = self.find_closest_index(target_time)
+        if index is None:
+            return None
+        return self.get_time_at_index(index)
