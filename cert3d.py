@@ -104,7 +104,9 @@ def derivate_data(data: PlotData, idle_corrections=False):
     return new_data
 
 
-def decode_stepper(step_data: BilevelData, dir_data: BilevelData, idle_corrections=False):
+def decode_stepper(
+    step_data: BilevelData, dir_data: BilevelData, idle_corrections=False
+):
     """Given the STEP and DIR channels, return step position as a PlotData."""
     # ensure the channels match in start and duration
     assert step_data.start_time == dir_data.start_time
@@ -213,9 +215,21 @@ class AnalysisWindow(AnalysisWindowBase):
         # process this event
         event.Skip()
 
-    def event_file_exit(self, _event):
-        # trigger an EVT_CLOSE event
+    def event_menu_file_exit(self, _event):
         self.Close()
+
+    def event_menu_file_open(self, _event):
+        with wx.FileDialog(
+            self,
+            "Open data file",
+            defaultDir=os.path.curdir,
+            wildcard="BIN files (*.bin)|*.bin|All files (*.*)|*.*",
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
+        ) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            # Proceed loading the file chosen by the user
+            self.interpret_data_file(fileDialog.GetPath())
 
     def event_button_start_stream_click(self, _event):
         self.c3d_port_thread.log_to_file = True
@@ -242,8 +256,8 @@ class AnalysisWindow(AnalysisWindowBase):
         global clear_log_file
         clear_log_file = True
 
-    def event_button_debug_2_click(self, event):
-        data = interpret_data("c3d_data - Copy.bin")
+    def interpret_data_file(self, filename):
+        data = interpret_data(filename)
         if data is None:
             print("ERROR: no data in file")
             return
@@ -259,6 +273,9 @@ class AnalysisWindow(AnalysisWindowBase):
         postprocess_signals(self.scope_panel)
         self.scope_panel.zoom_to_all()
         self.scope_panel.Refresh()
+
+    def event_button_debug_2_click(self, event):
+        self.interpret_data_file("c3d_data - Copy.bin")
 
     def event_button_interpret_click(self, _event):
         # stop streaming and close file
@@ -453,9 +470,9 @@ def packets_to_signals(packets, header: InfoHeader):
         # adjust edges so no edge is negative:
         for i in range(1, len(edges[channel_index])):
             while edges[channel_index][i] < edges[channel_index][i - 1]:
-                print('WARNING: adjusted edge to make it non-negative')
-                print('         possibly something is out of sync')
-                print('         restarting may fix')
+                print("WARNING: adjusted edge to make it non-negative")
+                print("         possibly something is out of sync")
+                print("         restarting may fix")
                 edges[channel_index][i] += overflow
         # add data to finish signals
         edges[channel_index].append(len(packets) * ticks_per_packet)
@@ -485,19 +502,19 @@ def postprocess_signals(scope_panel: ScopePanel):
         for signal in channel.signals:
             all_signals[signal.name] = signal.get_master_data()
     # find all channels with both a *_STEP and *_DIR signal
-    names = [x[:-5] for x in all_signals.keys() if x.endswith('_STEP')]
-    names = [x for x in names if x + '_DIR' in all_signals.keys()]
+    names = [x[:-5] for x in all_signals.keys() if x.endswith("_STEP")]
+    names = [x for x in names if x + "_DIR" in all_signals.keys()]
     # postprocess each one
     new_signals = []
     for name in names:
-        step_data = all_signals[name + '_STEP']
-        dir_data = all_signals[name + '_DIR']
+        step_data = all_signals[name + "_STEP"]
+        dir_data = all_signals[name + "_DIR"]
         pos_data = decode_stepper(step_data, dir_data)
         vel_data = derivate_data(pos_data)
         acc_data = derivate_data(vel_data)
-        new_signals.append(Signal(name + '_POS', wx.CYAN, 1, pos_data))
-        new_signals.append(Signal(name + '_VEL', wx.CYAN, 1, vel_data))
-        new_signals.append(Signal(name + '_ACC', wx.CYAN, 1, acc_data))
+        new_signals.append(Signal(name + "_POS", wx.CYAN, 1, pos_data))
+        new_signals.append(Signal(name + "_VEL", wx.CYAN, 1, vel_data))
+        new_signals.append(Signal(name + "_ACC", wx.CYAN, 1, acc_data))
     # add new channels for the new signals
     for signal in new_signals:
         scope_panel.add_channel(ScopeChannel(height=120, signal=signal))

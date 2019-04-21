@@ -617,6 +617,17 @@ class ScopePanel(wx.Panel):
                 if channel.low_value == channel.high_value:
                     channel.high_value = channel.low_value + 1e99
 
+    def trim_channels(self, idle_ms=100):
+        """Trim inactiviy from the start and end of the signals."""
+        # get first time of activity
+        first_activity = []
+        last_activity = []
+        for channel in self.channels:
+            for signal in channel.signals:
+                data = signal.get_master_data()
+                if data.get_point_count() < 2:
+                    continue
+
     @staticmethod
     def time_to_text(time_s):
         """Convert the time in seconds to a text value."""

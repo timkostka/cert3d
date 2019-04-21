@@ -1140,7 +1140,7 @@
                                         <property name="window_extra_style"></property>
                                         <property name="window_name"></property>
                                         <property name="window_style"></property>
-                                        <event name="OnButtonClick">event_file_exit</event>
+                                        <event name="OnButtonClick">event_menu_file_exit</event>
                                     </object>
                                 </object>
                             </object>
@@ -1295,14 +1295,32 @@
                         <property name="checked">0</property>
                         <property name="enabled">1</property>
                         <property name="help"></property>
-                        <property name="id">wxID_ANY</property>
+                        <property name="id">wxID_OPEN</property>
+                        <property name="kind">wxITEM_NORMAL</property>
+                        <property name="label">&amp;Open</property>
+                        <property name="name">menu_file_open</property>
+                        <property name="permission">none</property>
+                        <property name="shortcut">Ctrl+O</property>
+                        <property name="unchecked_bitmap"></property>
+                        <event name="OnMenuSelection">event_menu_file_open</event>
+                    </object>
+                    <object class="separator" expanded="1">
+                        <property name="name">m_separator1</property>
+                        <property name="permission">none</property>
+                    </object>
+                    <object class="wxMenuItem" expanded="1">
+                        <property name="bitmap"></property>
+                        <property name="checked">0</property>
+                        <property name="enabled">1</property>
+                        <property name="help"></property>
+                        <property name="id">wxID_EXIT</property>
                         <property name="kind">wxITEM_NORMAL</property>
                         <property name="label">E&amp;xit</property>
                         <property name="name">menu_file_exit</property>
                         <property name="permission">none</property>
-                        <property name="shortcut"></property>
+                        <property name="shortcut">Alt+F4</property>
                         <property name="unchecked_bitmap"></property>
-                        <event name="OnMenuSelection">event_file_exit</event>
+                        <event name="OnMenuSelection">event_menu_file_exit</event>
                     </object>
                 </object>
             </object>

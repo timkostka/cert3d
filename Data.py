@@ -154,7 +154,8 @@ class Data:
 
     def is_empty(self):
         """Return True if empty."""
-        raise NotImplementedError
+        return self.get_point_count() == 0
+        #raise NotImplementedError
 
     def get_point_count(self):
         """Return the number of data points in this set."""
