@@ -246,6 +246,7 @@ class TriStateData(Data):
         height = rect[3]
         width = rect[2]
         left = rect[0]
+        right = rect[0] + rect[2] - 1
         # find first index within window
         index = self.find_index_after(left_time)
         if index > 0:
@@ -256,6 +257,10 @@ class TriStateData(Data):
         )
         time = self.get_time_at_index(index)
         x2 = left + round((time - left_time) * pixels_per_second)
+        if x2 < left - thickness:
+            x2 = left - thickness
+        elif x2 > right + thickness:
+            x2 = right - thickness
         for _ in range(right_index - index):
             x1 = x2
             # draw transition on leading edge
@@ -266,6 +271,10 @@ class TriStateData(Data):
             time = self.get_time_at_index(index)
             value = self.points[index][1]
             x2 = left + round((time - left_time) * pixels_per_second)
+            if x2 < left - thickness:
+                x2 = left - thickness
+            elif x2 > right + thickness:
+                x2 = right - thickness
             # if it's a high or low edge, draw it
             if value == 0 or value == 1:
                 dc.SetBrush(solid_brush)
@@ -471,6 +480,7 @@ class BilevelData(Data):
         height = rect[3]
         width = rect[2]
         left = rect[0]
+        right = rect[0] + rect[2] - 1
         # find first index to left of window
         index = self.find_index_after(left_time)
         if index > 0:
@@ -485,6 +495,10 @@ class BilevelData(Data):
         # get time at the index
         time = self.get_time_at_index(index)
         x2 = left + round((time - left_time) * pixels_per_second)
+        if x2 < left - thickness:
+            x2 = left - thickness
+        elif x2 > right + thickness:
+            x2 = right - thickness
         for _ in range(right_index - index):
             x1 = x2
             # draw transition on leading edge
@@ -495,6 +509,10 @@ class BilevelData(Data):
             signal_low = not signal_low
             time = self.get_time_at_index(index)
             x2 = left + round((time - left_time) * pixels_per_second)
+            if x2 < left - thickness:
+                x2 = left - thickness
+            elif x2 > right + thickness:
+                x2 = right - thickness
             y = y2 - thickness + 1 if signal_low else y1
             dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()

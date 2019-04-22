@@ -17,7 +17,7 @@ import serial
 import serial.tools.list_ports
 import wx
 
-from AnalysisWindowBase import AnalysisWindowBase
+from AnalysisWindowBase import AnalysisWindowBase, TestWindowBase
 from Data import *
 from ScopePanel import *
 
@@ -436,6 +436,12 @@ class AnalysisWindow(AnalysisWindowBase):
     def event_button_trim_click(self, _event):
         self.scope_panel.trim_signals()
 
+    def event_button_open_test_window_click(self, event):
+        test_window = TestWindowBase(self)
+        test_window.ShowModal()
+        # self.Disable()
+        # test_window.Show()
+
 
 class InfoHeader:
     """An InfoHeader contains information about sets of Packets."""
@@ -631,11 +637,11 @@ def postprocess_signals(scope_panel: ScopePanel):
         step_data = all_signals[name + "_STEP"]
         dir_data = all_signals[name + "_DIR"]
         pos_data = decode_stepper(step_data, dir_data)
-        #vel_data = derivate_data_squared_signal(pos_data)
+        # vel_data = derivate_data_squared_signal(pos_data)
         vel_data = derivate_data_triangle_pulses(pos_data)
         acc_data = derivate_data_squared_signal(vel_data)
         # vel_data = derivate_data(pos_data)
-        #acc_data = derivate_data(vel_data)
+        # acc_data = derivate_data(vel_data)
         new_signals.append(Signal(name + "_POS", wx.CYAN, 1, pos_data))
         new_signals.append(Signal(name + "_VEL", wx.CYAN, 1, vel_data))
         new_signals.append(Signal(name + "_ACC", wx.CYAN, 1, acc_data))

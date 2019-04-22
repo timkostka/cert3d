@@ -280,7 +280,6 @@ class ScopePanel(wx.Panel):
             channel = ScopeChannel(height=40, signal=signal)
             # add this channel
             self.add_channel(channel)
-
         for name in ["X_POS", "Y_POS", "Z_POS", "E_POS"]:
             data = PlotData()
             data.invent_data(2000)
