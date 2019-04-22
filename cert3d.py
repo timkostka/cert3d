@@ -154,7 +154,6 @@ def derivate_data_triangle_pulses(
 
 def derivate_data_squared_signal(data: PlotData):
     """Return the exact derivative of the given data."""
-    #points = [(data.points[0][0], 0)]
     points = []
     for p1, p2 in zip(data.points[:-1], data.points[1:]):
         dx = p2[0] - p1[0]

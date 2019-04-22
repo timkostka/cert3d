@@ -275,6 +275,7 @@ class ScopePanel(wx.Panel):
                 data = BilevelData()
             data.invent_data(2000)
             signal = Signal(name=name, color=wx.GREEN, thickness=1, data=data)
+            signal.create_simplified_data_sets()
             # create a channel for this signal
             channel = ScopeChannel(height=40, signal=signal)
             # add this channel
@@ -284,6 +285,7 @@ class ScopePanel(wx.Panel):
             data = PlotData()
             data.invent_data(2000)
             signal = Signal(name=name, color=wx.CYAN, thickness=1, data=data)
+            signal.create_simplified_data_sets()
             channel = ScopeChannel(height=120, signal=signal)
             self.add_channel(channel)
 
@@ -631,6 +633,8 @@ class ScopePanel(wx.Panel):
         for channel in self.channels:
             for signal in channel.signals:
                 data = signal.get_master_data()
+                if isinstance(data, PlotData):
+                    data.optimize()
                 if data.get_point_count() < 2:
                     continue
                 if isinstance(data, PlotData):
@@ -644,10 +648,10 @@ class ScopePanel(wx.Panel):
                         last_activity.append(data.get_time_at_index(-1))
                 elif isinstance(data, BilevelData):
                     first_activity.append(data.get_time_at_index(1))
-                    last_activity.append(data.get_time_at_index(-1))
+                    last_activity.append(data.get_time_at_index(-2))
                 elif isinstance(data, TriStateData):
                     first_activity.append(data.get_time_at_index(1))
-                    last_activity.append(data.get_time_at_index(-1))
+                    last_activity.append(data.get_time_at_index(-2))
                 else:
                     raise ValueError("type %s is unexptected" % type(data))
         # find values to trim to
@@ -690,6 +694,7 @@ class ScopePanel(wx.Panel):
                         data.edges[-1] = tick
                     else:
                         data.points[-1] = (tick, data.points[-1][1])
+                    signal.create_simplified_data_sets()
         self.Refresh()
 
     @staticmethod

@@ -569,6 +569,21 @@ class PlotData(Data):
     def get_point_count(self):
         return len(self.points)
 
+    def optimize(self):
+        """Reduce the number of points if possible."""
+        i = 0
+        # look for straight line segments and delete points is possible
+        while i < len(self.points) - 2:
+            i += 1
+            x1, y1 = self.points[i - 1]
+            x2, y2 = self.points[i]
+            x3, y3 = self.points[i + 1]
+            alpha = (x2 - x1) / (x3 - x1)
+            y_test = y1 + (y3 - y1) * alpha
+            if y2 == y_test:
+                del self.points[i]
+                i -= 1
+
     def invent_data(self, point_count=2000):
         """Populate with randomly generated data."""
         self.start_time = 0.0
@@ -638,37 +653,8 @@ class PlotData(Data):
             if x1 > right:
                 break
             #if x2 >= left:
+            #dc.DrawPoint(x2, y2)
             dc.DrawLine(x1, y1, x2, y2)
-        dc.DestroyClippingRegion()
-        return
-
-
-        # find first index to left of window
-        index = self.find_index_after(left_time)
-        if index > 0:
-            index -= 1
-        # find first index to the right of the window
-        right_index = self.find_index_after(
-            left_time + width / pixels_per_second
-        )
-        # get the correct signal polarity
-        if index % 2 == 1:
-            signal_low = not signal_low
-        # get time at the index
-        time = self.get_time_at_index(index)
-        x2 = left + round((time - left_time) * pixels_per_second)
-        for _ in range(right_index - index):
-            x1 = x2
-            # draw transition on leading edge
-            if index > 0:
-                dc.DrawRectangle(x1, y1, thickness, height)
-            # go to the next value
-            index += 1
-            signal_low = not signal_low
-            time = self.get_time_at_index(index)
-            x2 = left + round((time - left_time) * pixels_per_second)
-            y = y2 - thickness + 1 if signal_low else y1
-            dc.DrawRectangle(x1, y, x2 - x1 + thickness, thickness)
         dc.DestroyClippingRegion()
 
     def get_time_at_index(self, index):
