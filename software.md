@@ -207,3 +207,24 @@ Here are some instructions we need to implement:
 * Start or stop logging to file, or read but ignore data
   * File is only open when logging is active
 * Exit thread
+
+### Postprocessing data
+
+Once we have the `STEP` and `DIR` channels, we need to estimate the position, velocity and acceleration of the channel.  This is a nontrivial exercise.
+
+* To calculate `POS`, assume each active edge on `STEP` is immediate.
+
+* After `POS` is calculated, post-process it by looking for regions of large idle time and add points to make the `POS` channel constant during the majority of these times.  Use an idle time of 1ms.
+  * For example, if we have data points `(0.0 s, 0)`, `(1.0 s, 1)`, add a point at `(0.999s, 0)`.
+
+* Calculate `VEL` as the sum of many triangular pulses, the area of each is the same and the duration is varied based on nearby points.  This may be tuned.
+
+  * We need a way to calculate (x, y) points from a bunch of triangular pulses.
+
+  * Put pulses in a list sorted by the endtime.
+
+  * I did this.  It works okay.
+
+* Calculate `ACC` as the exact derivative of `VEL`.  Since VEL is piecewise linear, ACC is piecewise constant.
+
+  * This produces some artifacts, which are real but undesired.  One way to remove these would be to apply a slew rate control to the signal.

@@ -106,6 +106,7 @@ class Signal:
 
 
 class ScopeChannel:
+
     def __init__(self, height=30, low_value=0.0, high_value=1.0, signal=None):
         # height of channel in pixels
         self.height = height

@@ -35,109 +35,6 @@ def create_stipple_bitmap(color):
     return bmp
 
 
-'''
-def create_signal_cluster(
-    data, pixels_per_screen=2000, max_edges_per_screen=500
-):
-    """
-    Create a signal cluster out of the given data array.
-
-    Data is assumed to be in (x, y) format where x is a value in ticks.
-
-    """
-    # screen size in pixels
-    # pixels_per_screen = asize(1000)
-    # maximum number of edges on screen at once
-    # max_edges_per_screen = 1000
-    # hold data set cluster
-    cluster = []
-    # add original data set
-    cluster.append([0, data])
-    # loop until data set is small enough
-    while len(data) > max_edges_per_screen:
-        assert all(data[i + 1][0] >= data[i][0] for i in range(len(data) - 1))
-        # find edge durations
-        durations = [y[0] - x[0] for x, y in zip(data[:-2], data[2:])]
-        durations.sort()
-        # get threshold duration to collapse
-        # the median of the combined duration of each adjacent edge pair
-        threshold = durations[round(len(durations) * reduction_threshold)]
-        # get durations between adjacent edges
-        durations = [y[0] - x[0] for x, y in zip(data[:-1], data[1:])]
-        # location of new edges
-        new_edges = []
-        last_index = 0
-        new_edges.append(data[0])
-        while last_index < len(data) - 1:
-            # collapse edges until threshold duration is met
-            index = last_index + 1
-            while (
-                index < len(data) - 1
-                and data[index][0] - data[index - 1][0] <= threshold
-            ):
-                index += 1
-            if index > last_index + 1:
-                new_edges.append((data[index][0], 2))
-            else:
-                new_edges.append(data[index])
-            last_index = index
-        data = new_edges
-        cluster.append([0, data])
-    # TODO: find min zoom levels for each data set
-    for index, (zoom, data) in enumerate(cluster):
-        # if we can display all points at once, there is no minimum zoom
-        if len(data) <= max_edges_per_screen:
-            cluster[index][0] = 0.0
-            continue
-        meps = max_edges_per_screen
-        min_duration = min(
-            y[0] - x[0] for x, y in zip(data[:-meps], data[meps:])
-        )
-        min_zoom = pixels_per_screen / min_duration
-        cluster[index][0] = min_zoom
-    # output summary
-    if verbose:
-        print(
-            "Collapsed data set (length %g sec) into the following cluster:"
-            % (data[-1][0] - data[0][0])
-        )
-        for zoom, data in cluster:
-            print("- %g pixels/second: %d data points" % (zoom, len(data)))
-    return cluster
-
-
-class DataCluster:
-    """A DataCluster contains a set of data sets for different zoom levels."""
-
-    def __init__(self, data):
-        # and data_set is a TriStateData or BilevelData or PlotData object
-        self.clusters = create_signal_cluster(data)
-        # time in seconds corresponding to x=0 value
-        self.start_time = 0.0
-        # data is given with x in seconds
-        self.name = "DATA"
-
-    def get_data(self, pixels_per_second):
-        """Return the data set at the given zoom level."""
-        for (zoom, data) in self.clusters:
-            if pixels_per_second > zoom:
-                return data
-        # if we didn't find an acceptable one, return the smallest set
-        return self.clusters[-1][1]
-
-    def get_master_data(self):
-        """Return the master data set."""
-        return self.clusters[0][1]
-
-    def get_total_duration(self):
-        """Return the total duration of this data."""
-        data = self.get_master_data()
-        if not data:
-            return 0.0
-        return data[-1][0] - data[0][0]
-'''
-
-
 class Data:
     """
     A Data is a supertype meant to be implemented for various data types.
@@ -156,10 +53,6 @@ class Data:
         """Return True if empty."""
         return self.get_point_count() == 0
 
-    def get_x_from_time(self, time):
-        """Return the x value corresponding to the given time."""
-        return (time - self.start_time) / self.seconds_per_tick
-
     def get_time_at_index(self, index):
         """Return time at the given point index."""
         raise NotImplementedError
@@ -167,12 +60,6 @@ class Data:
     def get_point_count(self):
         """Return the number of data points in this set."""
         raise NotImplementedError
-
-    def get_length(self):
-        """Return the length of the data."""
-        if self.is_empty():
-            return None
-        return self.get_time_at_index(-1) - self.get_time_at_index(0)
 
     def get_edge_near_time(self, time):
         """Should return the time closest to the given time, or None."""
@@ -199,6 +86,53 @@ class Data:
     def get_reduced_data(self):
         """Approximate the data with a reduced set and return it."""
         raise NotImplementedError
+
+    def find_index_after(self, target_time):
+        """Return the first index after the given time, or None."""
+        if self.is_empty():
+            return None
+        low = 0
+        high = self.get_point_count() - 1
+        # loop until low and high are adjacent
+        while low < high:
+            test = (low + high) // 2
+            time = self.get_time_at_index(test)
+            if time <= target_time:
+                assert low < test + 1
+                low = test + 1
+            else:
+                assert high > test
+                high = test
+        return low
+
+    def find_closest_index(self, target_time):
+        """Return the data index closest to the given time."""
+        if self.is_empty():
+            return None
+        if target_time < self.start_time:
+            return 0
+        index = self.find_index_after(target_time)
+        if index is None:
+            return len(self.edges) - 1
+        # else it's either index or index - 1
+        if index == 0:
+            return index
+        low = self.get_time_at_index(index - 1)
+        high = self.get_time_at_index(index)
+        if abs(target_time - low) < abs(target_time - high):
+            return index - 1
+        else:
+            return index
+
+    def get_length(self):
+        """Return the length of the data."""
+        if self.is_empty():
+            return None
+        return self.get_time_at_index(-1) - self.get_time_at_index(0)
+
+    def get_x_from_time(self, time):
+        """Return the x value corresponding to the given time."""
+        return (time - self.start_time) / self.seconds_per_tick
 
 
 class TriStateData(Data):
@@ -236,24 +170,6 @@ class TriStateData(Data):
             return None
         return self.get_time_at_index(index)
 
-    def find_index_after(self, target_time):
-        """Return the first index at or after the given time."""
-        if self.is_empty():
-            return None
-        low = 0
-        high = len(self.points) - 1
-        # loop until low and high are adjacent
-        while low < high:
-            test = (low + high) // 2
-            time = self.get_time_at_index(test)
-            if time < target_time:
-                assert low < test + 1
-                low = test + 1
-            else:
-                assert high > test
-                high = test
-        return low
-
     def get_time_at_index(self, index):
         """Return the time at the given data index."""
         return self.start_time + self.points[index][0] * self.seconds_per_tick
@@ -270,25 +186,6 @@ class TriStateData(Data):
             )
         )
         return ticks * self.seconds_per_tick
-
-    def find_closest_index(self, target_time):
-        """Return the data index closest to the given time."""
-        if self.is_empty():
-            return None
-        if target_time < self.start_time:
-            return 0
-        index = self.find_index_after(target_time)
-        if index is None:
-            return len(self.points) - 1
-        # else it's either index or index - 1
-        if index == 0:
-            return index
-        low = self.get_time_at_index(index - 1)
-        high = self.get_time_at_index(index)
-        if abs(target_time - low) < abs(target_time - high):
-            return index - 1
-        else:
-            return index
 
     def invent_data(self, length=200):
         """Populate with randomly generated data."""
@@ -506,6 +403,10 @@ class BilevelData(Data):
         """Return the number of data points in this set."""
         return len(self.edges)
 
+    def get_time_at_index(self, index):
+        """Return the time at the given data index."""
+        return self.start_time + self.edges[index] * self.seconds_per_tick
+
     def invent_data(self, length=200):
         """Populate with randomly generated data."""
         self.start_high = random.choice([True, False])
@@ -532,47 +433,6 @@ class BilevelData(Data):
             )
         )
         return ticks * self.seconds_per_tick
-
-    def find_index_after(self, target_time):
-        """Return the first index at or after the given time."""
-        if not self.edges:
-            return None
-        low = 0
-        high = len(self.edges) - 1
-        # loop until low and high are adjacent
-        while low < high:
-            test = (low + high) // 2
-            time = self.start_time + self.edges[test] * self.seconds_per_tick
-            if time < target_time:
-                assert low < test + 1
-                low = test + 1
-            else:
-                assert high > test
-                high = test
-        return low
-
-    def get_time_at_index(self, index):
-        """Return the time at the given data index."""
-        return self.start_time + self.edges[index] * self.seconds_per_tick
-
-    def find_closest_index(self, target_time):
-        """Return the data index closest to the given time."""
-        if not self.edges:
-            return None
-        if target_time < self.start_time:
-            return 0
-        index = self.find_index_after(target_time)
-        if index is None:
-            return len(self.edges) - 1
-        # else it's either index or index - 1
-        if index == 0:
-            return index
-        low = self.get_time_at_index(index - 1)
-        high = self.get_time_at_index(index)
-        if abs(target_time - low) < abs(target_time - high):
-            return index - 1
-        else:
-            return index
 
     def get_edge_near_time(self, target_time):
         """Return the edge time closest to the target time, or None."""
@@ -814,43 +674,6 @@ class PlotData(Data):
     def get_time_at_index(self, index):
         """Return the time at the given data index."""
         return self.start_time + self.points[index][0] * self.seconds_per_tick
-
-    def find_index_after(self, target_time):
-        """Return the first index at or after the given time."""
-        if not self.points:
-            return None
-        low = 0
-        high = len(self.points) - 1
-        # loop until low and high are adjacent
-        while low < high:
-            test = (low + high) // 2
-            time = self.get_time_at_index(test)
-            if time < target_time:
-                assert low < test + 1
-                low = test + 1
-            else:
-                assert high > test
-                high = test
-        return low
-
-    def find_closest_index(self, target_time):
-        """Return the data index closest to the given time."""
-        if not self.points:
-            return None
-        if target_time < self.start_time:
-            return 0
-        index = self.find_index_after(target_time)
-        if index is None:
-            return self.get_point_count() -1
-        # else it's either index or index - 1
-        if index == 0:
-            return index
-        low = self.get_time_at_index(index - 1)
-        high = self.get_time_at_index(index)
-        if abs(target_time - low) < abs(target_time - high):
-            return index - 1
-        else:
-            return index
 
     def get_edge_near_time(self, target_time):
         """Return the edge time closest to the target time, or None."""

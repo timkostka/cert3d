@@ -24,6 +24,18 @@ from ScopePanel import *
 vid = 0x0483
 pid = 0x5740
 
+# signals as processed from file
+signal_names = [
+    "X_STEP",
+    "X_DIR",
+    "Y_STEP",
+    "Y_DIR",
+    "Z_STEP",
+    "Z_DIR",
+    "E_STEP",
+    "E_DIR",
+]
+
 verbose = True
 
 # exit_children = False
@@ -59,6 +71,104 @@ verbose = True
 
 # default file name
 c3d_log_filename = "c3d_data.bin"
+
+
+def derivate_data_triangle_pulses(
+    data: PlotData,
+    idle_corrections=False,
+    max_pulse_duration=0.001,
+    min_pulse_duration=0.001,
+):
+    """Return the derivative of the given data."""
+    """
+    points = [(data.points[0][0], 0)]
+    for p1, p2 in zip(data.points[:-1], data.points[1:]):
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        if dx == 0:
+            dx = 1
+            dy = 0
+        points.append((p2[0], dy / dx))
+    """
+    # find defintion for each pulse in the form of
+    # (peak_time, half_duration)
+    # not the peak amplitude is equal to 1 / half_duration by definition
+    # for example (5, 2) is a triangular pulse with the points
+    # (5 - 2, 0), (5, 1 / 2), (6 + 2, 0)
+    pulses = []
+    points = data.points
+    # add another point at the end thg
+    points.append(points[-1])
+    for p1, p2, p3 in zip(points[:-2], points[1:-1], points[2:]):
+        if p2[1] == p1[1]:
+            continue
+        half_duration = max_pulse_duration / data.seconds_per_tick
+        pulses.append((p2[0], (p2[1] - p1[1]) / half_duration, half_duration))
+    # create data points
+    x_points = set()
+    for (center_time, peak, half_duration) in pulses:
+        x_points.add(center_time - half_duration)
+        x_points.add(center_time)
+        x_points.add(center_time + half_duration)
+    # add first and last point
+    x_points.add(points[0][0])
+    x_points.add(points[-1][0])
+    # sort points and keep without bounds
+    x_points = sorted(x_points)
+    x_points = [
+        x for x in x_points if x >= points[0][0] and x <= points[-1][0]
+    ]
+    # sort pulses by end time
+    pulses = sorted(pulses, key=lambda p: p[0] + p[2])
+    # now create velocity for each point
+    last_index = 0
+    first_index = 0
+    new_points = []
+    for x in x_points:
+        # increment first index if necessary
+        while (
+            first_index < len(pulses)
+            and pulses[first_index][0] + pulses[first_index][2] <= x
+        ):
+            first_index += 1
+        # increment end index if necessary
+        while (
+            last_index < len(pulses)
+            and pulses[last_index][0] - pulses[last_index][2] < x
+        ):
+            last_index += 1
+        # now add up pulses to get this time
+        y = 0.0
+        for index in range(first_index, last_index):
+            center_time, peak, half_duration = pulses[index]
+            alpha = abs(x - center_time) / half_duration
+            assert alpha <= 1.0
+            y += peak * (1.0 - alpha)
+        new_points.append((x, y))
+    new_data = PlotData()
+    new_data.start_time = data.start_time
+    new_data.seconds_per_tick = data.seconds_per_tick
+    new_data.points = new_points
+    return new_data
+
+
+def derivate_data_squared_signal(data: PlotData):
+    """Return the exact derivative of the given data."""
+    #points = [(data.points[0][0], 0)]
+    points = []
+    for p1, p2 in zip(data.points[:-1], data.points[1:]):
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        if dx == 0:
+            dx = 1
+            dy = 0
+        points.append((p1[0], dy / dx))
+        points.append((p2[0], dy / dx))
+    new_data = PlotData()
+    new_data.start_time = data.start_time
+    new_data.seconds_per_tick = data.seconds_per_tick
+    new_data.points = points
+    return new_data
 
 
 def derivate_data(data: PlotData, idle_corrections=False):
@@ -105,7 +215,10 @@ def derivate_data(data: PlotData, idle_corrections=False):
 
 
 def decode_stepper(
-    step_data: BilevelData, dir_data: BilevelData, idle_corrections=True
+    step_data: BilevelData,
+    dir_data: BilevelData,
+    correct_idle_time=True,
+    idle_time=0.001,
 ):
     """Given the STEP and DIR channels, return step position as a PlotData."""
     # ensure the channels match in start and duration
@@ -142,7 +255,7 @@ def decode_stepper(
         pass
     # add last value
     points.append((step_data.edges[-1], steps))
-    if idle_corrections:
+    if correct_idle_time:
         # Note: the data above is taken by averaging over the distance between
         # active edges.  When this is a large value, such as when the stepper
         # is at rest and begins to move, it can produce misleading data.  To
@@ -150,13 +263,13 @@ def decode_stepper(
         # is very slow.
         durations = [y[0] - x[0] for x, y in zip(points[:-1], points[1:])]
         durations.sort()
-        cutoff = durations[len(durations) // 2] * 5
+        cutoff = idle_time / step_data.seconds_per_tick
         # cutoff = min(x for x in durations if x <= cutoff)
         i = 0
         while i < len(points) - 1:
             i += 1
             duration = points[i][0] - points[i - 1][0]
-            if duration <= 2 * cutoff:
+            if duration <= cutoff:
                 continue
             points.insert(i, (points[i][0] - cutoff, points[i - 1][1]))
             i += 1
@@ -263,14 +376,18 @@ class AnalysisWindow(AnalysisWindowBase):
             return
         print([x.get_length() for x in data])
         # replace signal data with data from file
+        self.scope_panel.clear()
         for index, this_data in enumerate(data):
-            channel = c3d_gui_window.scope_panel.channels[index]
-            name = channel.signals[0].name
-            channel.signals = []
-            channel.add_signal(Signal(name=name, data=this_data))
+            channel = ScopeChannel(
+                signal=Signal(name=signal_names[index], data=this_data)
+            )
+            self.scope_panel.add_channel(channel)
         # create step channels if possible
-        del c3d_gui_window.scope_panel.channels[8:]
         postprocess_signals(self.scope_panel)
+        # find simplified representations
+        for channel in self.scope_panel.channels:
+            for signal in channel.signals:
+                signal.create_simplified_data_sets()
         self.scope_panel.zoom_to_all()
         self.scope_panel.Refresh()
 
@@ -283,7 +400,9 @@ class AnalysisWindow(AnalysisWindowBase):
         # wait until file is closed
         while self.c3d_port_thread.log_file:
             time.sleep(0.010)
-        signals = interpret_data(self.c3d_port_thread.log_filename)
+        self.interpret_data_file(self.c3d_port_thread.log_filename)
+        return
+        signals = interpret_data()
         if signals is None:
             print("ERROR: could not interpret log file")
             return
@@ -513,8 +632,11 @@ def postprocess_signals(scope_panel: ScopePanel):
         step_data = all_signals[name + "_STEP"]
         dir_data = all_signals[name + "_DIR"]
         pos_data = decode_stepper(step_data, dir_data)
-        vel_data = derivate_data(pos_data)
-        acc_data = derivate_data(vel_data)
+        #vel_data = derivate_data_squared_signal(pos_data)
+        vel_data = derivate_data_triangle_pulses(pos_data)
+        acc_data = derivate_data_squared_signal(vel_data)
+        # vel_data = derivate_data(pos_data)
+        #acc_data = derivate_data(vel_data)
         new_signals.append(Signal(name + "_POS", wx.CYAN, 1, pos_data))
         new_signals.append(Signal(name + "_VEL", wx.CYAN, 1, vel_data))
         new_signals.append(Signal(name + "_ACC", wx.CYAN, 1, acc_data))
