@@ -106,7 +106,6 @@ class Signal:
 
 
 class ScopeChannel:
-
     def __init__(self, height=30, low_value=0.0, high_value=1.0, signal=None):
         # height of channel in pixels
         self.height = height
@@ -188,6 +187,14 @@ class ScopePanel(wx.Panel):
         self.selecting_time = False
         # maximum distance in pixels to snap to a time value
         self.snap_distance = asize(10)
+        # offset in y pixels
+        self.y_offset = 0
+        # desired height to fit all channels in pixels
+        self.desired_height = 0
+        # minimum time of all data
+        self.minimum_time = 0.0
+        # maximum time of all data
+        self.maximum_time = 0.0
         # delta time unit for horizontal axis (e.g. 10e-9)
         self.best_dt = None
         # highlighted point
@@ -244,6 +251,8 @@ class ScopePanel(wx.Panel):
 
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
 
+        self.Bind(wx.EVT_SIZE, self.event_on_size)
+
         self.adjust_channel_name_size()
 
         # self.zoom_to_all()
@@ -252,6 +261,48 @@ class ScopePanel(wx.Panel):
         self.populate_example_data()
 
         self.zoom_to_all()
+
+    def redo_scroll_bars(self):
+        """Show/hide scroll bars based on current state."""
+        # if no data, hide scroll bars
+        width, height = self.GetSize()
+        if not self.channels:
+            show_vertical_bar = False
+            show_horizontal_bar = False
+        else:
+            # get y position of last channel
+            show_vertical_bar = height < self.desired_height
+        # see if we need to show or hide the vertical bar
+        vertical_bar_shown = self.GetParent().scroll_bar_vertical.IsShown()
+        # show or hide bar
+        if vertical_bar_shown != show_vertical_bar:
+            self.GetParent().scroll_bar_vertical.Show(show_vertical_bar)
+        # if vertical bar is hidden, we have no offset
+        if not show_vertical_bar:
+            self.y_offset = 0
+        # update ticks
+        if show_vertical_bar:
+            self.GetParent().scroll_bar_vertical.SetScrollbar(
+                self.y_offset, height, self.desired_height, asize(10)
+            )
+        return
+        horizontal_bar_shown = self.GetParent().show_horizontal_bar.IsShown()
+        # find x pixel of leftmost time
+        x_low = self.get_x_from_time(self.minimum_time)
+        x_high = self.get_x_from_time(self.maximum_time)
+        # get first x pixel
+        first_x = self.margin + self.channel_length + self.padding2
+        # TODO: implement this
+        show_horizontal_bar = x_low < first_x
+
+        # either show or hide horizontal bar
+        if horizontal_bar_shown != show_horizontal_bar:
+            self.GetParent().scroll_bar_horizontal.Show(show_horizontal_bar)
+        # update horizontal bar
+        wanted_width = 0
+
+    def event_on_size(self, _event):
+        self.redo_scroll_bars()
 
     def clear(self):
         """Erase all channels."""
@@ -339,9 +390,19 @@ class ScopePanel(wx.Panel):
         menu.AppendSubMenu(submenu, "&Thickness")
         return menu
 
+    def update_desired_height(self):
+        if not self.channels:
+            self.desired_height = 0
+            return
+        # update desired height
+        self.desired_height = 2 * self.margin
+        self.desired_height += (len(self.channels) - 1) * self.padding
+        self.desired_height += sum(x.height for x in self.channels)
+
     def add_channel(self, channel):
         """Add a new channel."""
         self.channels.append(channel)
+        self.update_desired_height()
 
     def get_channel_from_y(self, y):
         """Return the channel index for the given y pixel, or None."""
@@ -549,10 +610,10 @@ class ScopePanel(wx.Panel):
             i = signal.active_data.find_closest_index(t)
             if i is None:
                 return
-            text = 'index %d, time %g' % (channel_index, t)
+            text = "index %d, time %g" % (channel_index, t)
             if isinstance(signal.active_data, PlotData):
                 y = signal.active_data.points[i][1]
-                text += ', value=%g' % y
+                text += ", value=%g" % y
             self.GetParent().status_bar.SetStatusText(text)
 
     def event_mouse_wheel(self, event):
@@ -592,7 +653,7 @@ class ScopePanel(wx.Panel):
 
     def get_channel_y_values(self, channel_index):
         """Return the top and bottom y pixels for the given channel."""
-        top = self.margin
+        top = self.margin - self.y_offset
         top += sum(x.height for x in self.channels[:channel_index])
         top += channel_index * self.padding
         return top, top + self.channels[channel_index].height - 1
@@ -867,7 +928,7 @@ class ScopePanel(wx.Panel):
         for x in range(left, right + 1, dt_pixels):
             dc.DrawRectangle(round(x), 0, 1, panel_rect[1])
         # get top pixel for next channel
-        top = 0
+        top = -self.y_offset
         timings = []
         # set font for channel name
         dc.SetFont(self.font_signal_name)

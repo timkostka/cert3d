@@ -309,6 +309,7 @@ all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
 
 
 class AnalysisWindow(AnalysisWindowBase):
+
     def __init__(self, parent):
         super(AnalysisWindow, self).__init__(parent)
         # set icon
@@ -333,6 +334,13 @@ class AnalysisWindow(AnalysisWindowBase):
         )
         # active test window, or None
         self.test_window = None
+
+    def event_on_vertical_scroll(self, _event):
+        # get new scroll offset
+        new_offset = self.scroll_bar_vertical.GetThumbPosition()
+        if self.scope_panel.y_offset != new_offset:
+            self.scope_panel.y_offset = new_offset
+            self.scope_panel.Refresh()
 
     def event_close(self, event):
         print("Handling EVT_CLOSE event")

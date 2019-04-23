@@ -38,7 +38,11 @@ class AnalysisWindowBase(wx.Frame):
 
         bSizer5 = wx.BoxSizer(wx.HORIZONTAL)
 
-        bSizer51 = wx.BoxSizer(wx.VERTICAL)
+        fgSizer1 = wx.FlexGridSizer(0, 2, 0, 0)
+        fgSizer1.AddGrowableCol(0)
+        fgSizer1.AddGrowableRow(0)
+        fgSizer1.SetFlexibleDirection(wx.BOTH)
+        fgSizer1.SetNonFlexibleGrowMode(wx.FLEX_GROWMODE_SPECIFIED)
 
         self.scope_panel = ScopePanel(
             self,
@@ -48,18 +52,25 @@ class AnalysisWindowBase(wx.Frame):
             wx.TAB_TRAVERSAL,
         )
 
-        bSizer51.Add(self.scope_panel, 1, wx.ALL | wx.EXPAND, 5)
+        fgSizer1.Add(self.scope_panel, 1, wx.ALL | wx.EXPAND, 0)
 
-        self.m_scrollBar2 = wx.ScrollBar(
+        self.scroll_bar_vertical = wx.ScrollBar(
+            self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.SB_VERTICAL
+        )
+        fgSizer1.Add(self.scroll_bar_vertical, 0, wx.ALL | wx.EXPAND, 0)
+
+        self.scroll_bar_horizontal = wx.ScrollBar(
             self,
             wx.ID_ANY,
             wx.DefaultPosition,
             wx.DefaultSize,
             wx.SB_HORIZONTAL,
         )
-        bSizer51.Add(self.m_scrollBar2, 0, wx.ALL | wx.EXPAND, 5)
+        self.scroll_bar_horizontal.Hide()
 
-        bSizer5.Add(bSizer51, 1, wx.EXPAND, 5)
+        fgSizer1.Add(self.scroll_bar_horizontal, 0, wx.ALL | wx.EXPAND, 0)
+
+        bSizer5.Add(fgSizer1, 1, wx.ALL | wx.EXPAND, 5)
 
         bSizer52 = wx.BoxSizer(wx.VERTICAL)
 
@@ -198,6 +209,8 @@ class AnalysisWindowBase(wx.Frame):
 
         self.SetSizer(bSizer1)
         self.Layout()
+        self.m_timer2 = wx.Timer()
+        self.m_timer2.SetOwner(self, wx.ID_ANY)
         self.status_bar = self.CreateStatusBar(3, wx.STB_SIZEGRIP, wx.ID_ANY)
         self.menu_bar = wx.MenuBar(0)
         self.menu_file = wx.Menu()
@@ -236,7 +249,9 @@ class AnalysisWindowBase(wx.Frame):
 
         # Connect Events
         self.Bind(wx.EVT_CLOSE, self.event_close)
-        self.scope_panel.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
+        self.scroll_bar_vertical.Bind(
+            wx.EVT_SCROLL, self.event_on_vertical_scroll
+        )
         self.button_open_test_window.Bind(
             wx.EVT_BUTTON, self.event_button_open_test_window_click
         )
@@ -281,7 +296,7 @@ class AnalysisWindowBase(wx.Frame):
     def event_close(self, event):
         event.Skip()
 
-    def event_mouse_wheel(self, event):
+    def event_on_vertical_scroll(self, event):
         event.Skip()
 
     def event_button_open_test_window_click(self, event):
