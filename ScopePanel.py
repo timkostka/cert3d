@@ -12,7 +12,7 @@ from dpi import asize
 from Data import *
 
 # maximum edges per screen
-max_points_per_screen = 2000
+max_points_per_screen = 1000
 
 # screen size in pixels
 screen_size = 1000
@@ -190,6 +190,9 @@ class ScopePanel(wx.Panel):
         self.snap_distance = asize(10)
         # delta time unit for horizontal axis (e.g. 10e-9)
         self.best_dt = None
+        # highlighted point
+        # (time, y_pixel)
+        self.highlighted_point = None
         # name of the dt (e.g. "10 ns")
         self.best_dt_text = None
         # font for signal lables
@@ -517,13 +520,40 @@ class ScopePanel(wx.Panel):
                     self.dragging_channel = (index, offset)
                     self.selected_channel_index = index
                     self.Refresh()
-        if self.snaptime_start and self.selecting_time:
+        elif self.snaptime_start and self.selecting_time:
             new_end = self.find_snaptime(event.GetPosition())
             if new_end != self.snaptime_end:
                 self.snaptime_end = new_end
                 if self.snaptime_end == self.snaptime_start:
                     self.snaptime_end = None
                 self.Refresh()
+        else:
+            y = event.GetPosition()[1]
+            channel_index = None
+            for i in range(len(self.channels)):
+                y1, y2 = self.get_channel_y_values(i)
+                if y1 <= y <= y2:
+                    # print('Dragging channel', self.dragging_channel)
+                    channel_index = i
+                    break
+            if channel_index is None:
+                return
+            # find tick value
+            signal = self.channels[channel_index].signals[0]
+            x = event.GetPosition()[0]
+            x_separator = self.margin + self.channel_length + self.padding2
+            if x < x_separator:
+                return
+            x -= x_separator
+            t = self.start_time + x / self.pixels_per_second
+            i = signal.active_data.find_closest_index(t)
+            if i is None:
+                return
+            text = 'index %d, time %g' % (channel_index, t)
+            if isinstance(signal.active_data, PlotData):
+                y = signal.active_data.points[i][1]
+                text += ', value=%g' % y
+            self.GetParent().status_bar.SetStatusText(text)
 
     def event_mouse_wheel(self, event):
         """Handle scrolling in/out via the mouse wheel."""

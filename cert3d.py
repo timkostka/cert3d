@@ -16,6 +16,7 @@ from dpi import asize
 import serial
 import serial.tools.list_ports
 import wx
+import wx.richtext
 
 from AnalysisWindowBase import AnalysisWindowBase, TestWindowBase
 from Data import *
@@ -71,6 +72,19 @@ verbose = True
 
 # default file name
 c3d_log_filename = "c3d_data.bin"
+
+
+class PrinterGeometry:
+    """A PrinterGeometry object holds information about printer geometry."""
+
+    def __init__(self, output=""):
+        # steps per mm
+        self.steps_per_mm = {c: 1 for c in "XYZE"}
+        # steps per mm
+        self.steps_per_mm = {c: 1 for c in "XYZE"}
+
+    def parse_output(self, output):
+        pass
 
 
 def derivate_data_triangle_pulses(
@@ -156,7 +170,7 @@ def derivate_data_squared_signal(data: PlotData):
     """Return the exact derivative of the given data."""
     points = []
     for p1, p2 in zip(data.points[:-1], data.points[1:]):
-        dx = p2[0] - p1[0]
+        dx = (p2[0] - p1[0]) * data.seconds_per_tick
         dy = p2[1] - p1[1]
         if dx == 0:
             dx = 1
@@ -217,7 +231,7 @@ def decode_stepper(
     step_data: BilevelData,
     dir_data: BilevelData,
     correct_idle_time=True,
-    idle_time=0.001,
+    idle_time=0.010,
 ):
     """Given the STEP and DIR channels, return step position as a PlotData."""
     # ensure the channels match in start and duration
@@ -308,11 +322,17 @@ class AnalysisWindow(AnalysisWindowBase):
         self.SetSize(window_size)
         self.Centre()
         # create slave thread to monitor c3d port
-        self.c3d_port_thread = SlaveThread()
+        self.c3d_port_thread = C3DPortMonitor()
         # adjust signal name width
         self.scope_panel.adjust_channel_name_size()
         # zoom to all
         self.scope_panel.zoom_to_all()
+        # set scaling of status bar
+        self.status_bar.SetStatusWidths(
+            [-1] * self.status_bar.GetFieldsCount()
+        )
+        # active test window, or None
+        self.test_window = None
 
     def event_close(self, event):
         print("Handling EVT_CLOSE event")
@@ -435,12 +455,13 @@ class AnalysisWindow(AnalysisWindowBase):
 
     def event_button_trim_click(self, _event):
         self.scope_panel.trim_signals()
+        self.scope_panel.zoom_to_all()
 
     def event_button_open_test_window_click(self, event):
-        test_window = TestWindowBase(self)
-        test_window.ShowModal()
-        # self.Disable()
-        # test_window.Show()
+        if not self.test_window:
+            self.test_window = TestWindow(self, self.c3d_port_thread)
+        self.test_window.Show()
+        self.test_window.SetFocus()
 
 
 class InfoHeader:
@@ -574,7 +595,7 @@ def packets_to_signals(packets, header: InfoHeader):
             * header.signal_frequencies[channel_index]
             // header.system_clock
         )
-        expected_offset = -ticks_per_packet // 8
+        expected_offset = -ticks_per_packet // 8 - ticks_per_packet
         # get overflow
         overflow = 2 * ticks_per_packet
         assert overflow == header.signal_overflow_ticks[channel_index]
@@ -637,17 +658,45 @@ def postprocess_signals(scope_panel: ScopePanel):
         step_data = all_signals[name + "_STEP"]
         dir_data = all_signals[name + "_DIR"]
         pos_data = decode_stepper(step_data, dir_data)
-        # vel_data = derivate_data_squared_signal(pos_data)
-        vel_data = derivate_data_triangle_pulses(pos_data)
-        acc_data = derivate_data_squared_signal(vel_data)
+        # scale from counts to units
+        # pos_data.points = [(x, y / 80.0) for (x, y) in pos_data.points]
+        vel_data = derivate_data_squared_signal(pos_data)
+        # vel_data = derivate_data_triangle_pulses(pos_data)
+        # acc_data = derivate_data_squared_signal(vel_data)
         # vel_data = derivate_data(pos_data)
-        # acc_data = derivate_data(vel_data)
+        acc_data = derivate_data(vel_data)
         new_signals.append(Signal(name + "_POS", wx.CYAN, 1, pos_data))
         new_signals.append(Signal(name + "_VEL", wx.CYAN, 1, vel_data))
         new_signals.append(Signal(name + "_ACC", wx.CYAN, 1, acc_data))
     # add new channels for the new signals
     for signal in new_signals:
-        scope_panel.add_channel(ScopeChannel(height=120, signal=signal))
+        scope_panel.add_channel(ScopeChannel(height=240, signal=signal))
+    # combine POS/VEL/ACC channels
+    colors = {
+        "X": wx.GREEN,
+        "Y": wx.CYAN,
+        "Z": wx.Colour(255, 0, 255),
+        "E": wx.WHITE,
+    }
+    name_to_index = {
+        scope_panel.channels[i].signals[0].name: i
+        for i in range(len(scope_panel.channels))
+    }
+    # set colors
+    for channel in scope_panel.channels:
+        channel.signals[0].color = colors[channel.signals[0].name[0]]
+    for c in "YZE":
+        for suffix in ["_POS", "_VEL", "_ACC"]:
+            scope_panel.channels[name_to_index["X" + suffix]].add_signal(
+                scope_panel.channels[name_to_index[c + suffix]].signals[0]
+            )
+    # delete channels that don't start with X
+    indices_to_delete = [
+        y for x, y in name_to_index.items() if x[0] != "X" and y >= 8
+    ]
+    indices_to_delete.sort(reverse=True)
+    for i in indices_to_delete:
+        del scope_panel.channels[i]
 
 
 def interpret_data(filename):
@@ -685,8 +734,8 @@ def interpret_data(filename):
     return signals
 
 
-class SlaveThread:
-    """This is a class to control and communicate with the slave thread."""
+class C3DPortMonitor:
+    """Asynchronously control and communicate the Cert3D port."""
 
     def __init__(self):
         """Create a new slave thread."""
@@ -740,6 +789,7 @@ class SlaveThread:
     def read_and_ignore_data(self):
         """Read and ignore data on the port until a command changes."""
         while self.serial_port and not self.exit_thread:
+            time.sleep(0.010)
             if not self.open_port_automatically:
                 break
             if self.log_to_file:
@@ -764,6 +814,7 @@ class SlaveThread:
         if self.serial_port and not self.log_file:
             self.log_file = open(self.log_filename, "bw")
         while not self.exit_thread:
+            time.sleep(0.001)
             if not self.open_port_automatically:
                 break
             # if self.discard_data:
@@ -878,6 +929,312 @@ class SlaveThread:
             self.serial_port.write(command)
         else:
             print("WARNING: port not open")
+
+
+class PrinterPortMonitor:
+    """Asynchronously control and communicate the printer serial port."""
+
+    def __init__(
+        self,
+        control: wx.richtext.RichTextCtrl,
+        gauge: wx.Gauge,
+        c3d_thread: C3DPortMonitor,
+    ):
+        # if True, close all ports and files and exit
+        self.exit_thread = False
+        # USB serial port open with the 3d printer board
+        self.serial_port = None
+        # text control to update with received messages
+        self.text_control = control
+        # set to True when an "ok" is received
+        self.ok_received = False
+        # if True, running commands
+        self.test_mode = False
+        # commands to send
+        self.commands_to_send = []
+        # progress gauge control
+        self.progress_gauge = gauge
+        # create and start the Thread object
+        self.thread = Thread(target=self.entry_point)
+        self.thread.start()
+        # hold the c3d board thread object
+        self.c3d_thread = c3d_thread
+
+    def entry_point(self):
+        """Entry point for the slave thread."""
+        print("Printer port slave thread is born!")
+        while not self.exit_thread:
+            # pause a bit
+            if self.test_mode:
+                time.sleep(0.001)
+            else:
+                time.sleep(0.050)
+            # look for ports if one isn't already open
+            if not self.serial_port:
+                self.open_port()
+            if not self.serial_port:
+                continue
+            # send command if it's ready
+            if self.test_mode and self.ok_received:
+                if not self.commands_to_send:
+                    self.test_mode = False
+                    self.report_info("Test complete!")
+                    print("We logged %d bytes." % self.c3d_thread.bytes_read)
+                    # stop logging
+                    time.sleep(0.25)
+                    self.c3d_thread.send_command(b"stop")
+                    self.c3d_thread.log_to_file = False
+                    self.progress_gauge.SetValue(
+                        self.progress_gauge.GetRange()
+                    )
+                else:
+                    self.send_command(self.commands_to_send[0])
+                    value = self.progress_gauge.GetRange() - len(
+                        self.commands_to_send
+                    )
+                    self.progress_gauge.SetValue(value)
+                    del self.commands_to_send[0]
+            # read and echo received commands
+            try:
+                data = self.serial_port.read(self.serial_port.in_waiting)
+                text = data.decode("utf-8")
+                if text:
+                    print(text)
+                    if "ok\n" in text:
+                        self.ok_received = True
+                    elif (
+                        text.startswith("\n")
+                        and self.text_control.GetValue()[-2:] == "ok"
+                    ):
+                        self.ok_received = True
+                    elif (
+                        text.startswith("k\n")
+                        and self.text_control.GetValue()[-1:] == "o"
+                    ):
+                        self.ok_received = True
+                    self.text_control.SetDefaultStyle(
+                        wx.TextAttr(wx.Colour(wx.BLACK))
+                    )
+                    self.text_control.AppendText(text)
+            except (
+                serial.serialutil.SerialTimeoutException,
+                serial.serialutil.SerialException,
+            ):
+                print("Printer board serial port disappeared!")
+                self.serial_port.close()
+                self.serial_port = None
+            pass
+        # close the port
+        if self.serial_port:
+            print("Closing printer port.")
+            self.serial_port.close()
+            self.serial_port = None
+        print("Printer port slave thread is dying!")
+
+    def report_info(self, text):
+        self.text_control.SetDefaultStyle(wx.TextAttr(wx.Colour(wx.BLUE)))
+        self.text_control.AppendText(text)
+        if not text.endswith("\n"):
+            self.text_control.AppendText("\n")
+
+    def run_test(self, commands):
+        """Run the given commands as a test."""
+        # reset C3D board
+        if not self.serial_port:
+            return
+        # begin logging
+        self.c3d_thread.log_to_file = True
+        self.c3d_thread.send_command(b"start")
+        # parse g code commands
+        commands = commands.split("\n")
+        # remove comments
+        commands = [x[: (x + ";").index(";")].strip() for x in commands]
+        # remove blank lines
+        commands = [x for x in commands if x]
+        self.progress_gauge.SetRange(len(commands))
+        self.progress_gauge.SetValue(0)
+        # set slave thread into test mode
+        self.report_info("Beginning test")
+        # start test
+        self.test_mode = False
+        self.ok_received = True
+        self.commands_to_send = commands
+        self.test_mode = True
+
+    def find_printer_ports(self):
+        """Return potential ports"""
+        ports = []
+        description = "Arduino Mega 2560 (COM"
+        for port in serial.tools.list_ports.comports():
+            if port.description.startswith(description):
+                ports.append(port)
+        return ports
+
+    def open_port(self):
+        """Try to find and open the cert3d board."""
+        # open port if it's not already open
+        if not self.serial_port:
+            for port in self.find_printer_ports():
+                try:
+                    serial_port = serial.Serial(
+                        port=port.device,
+                        baudrate=250000,
+                        timeout=0,
+                        parity=serial.PARITY_NONE,
+                    )
+                    self.serial_port = serial_port
+                    print("Connected to printer board on %s." % port.device)
+                except serial.serialutil.SerialException as e:
+                    # There is a bug somewhere (win10 usbser?) that causes a
+                    # call to win32.SetCommState from serialwin32.py:220 to
+                    # fail and return with:
+                    #   OSError(22, 'The parameter is incorrect.', None, 87)
+                    # No solution to this has been identified.  Many users have
+                    # encountered it.  If we simply ignore this error, the
+                    # program works fine, so that is exactly what we do.
+                    #
+                    # Except we can't, since the object never gets saved to
+                    # serial_port.  I have to edit the PySerial library to get
+                    # this to work correctly.
+                    #
+                    # After later consideration, I believe this issue is caused
+                    # by a non-graceful shutdown of the COM port.  It seems to
+                    # be self-correcting, in that if you wait 5-10 minutes, the
+                    # error doesn't come up.  So it should not be a large issue
+                    # for users, since abrupt board resets should not happen.
+                    if (
+                        "OSError(22, 'The parameter is incorrect.', None, 87)"
+                        in str(e)
+                    ):
+                        raise
+                    print("Unable to connect to printer on %s" % port.device)
+                    # sleep so this doesn't trigger a ton
+                    time.sleep(1.0)
+
+    def send_command(self, command):
+        """Send a command to the printer."""
+        self.ok_received = False
+        if not command:
+            return
+        # add newline if necessary
+        if command[-1] != "\n":
+            command += "\n"
+        if self.serial_port:
+            self.serial_port.write(command.encode("utf-8"))
+            self.text_control.SetDefaultStyle(wx.TextAttr(wx.Colour(wx.RED)))
+            self.text_control.AppendText(command)
+        else:
+            print("WARNING: port not open.  command ignored")
+
+    def exit_and_join(self):
+        """Exit this thread and join it."""
+        self.exit_thread = True
+        start = time.time()
+        while self.thread.is_alive():
+            time.sleep(0.010)
+            if time.time() - start > 5:
+                print("ERROR: slave thread not exiting")
+                exit(1)
+        self.thread.join()
+
+
+class TestWindow(TestWindowBase):
+    """The TestWindow is for running g-code tests."""
+
+    def __init__(self, parent, c3d_thread):
+        super(TestWindow, self).__init__(parent)
+        # set size
+        self.SetSize(asize(wx.Size(700, 400)))
+        self.Center()
+        # set icon
+        self.SetIcon(wx.Icon("c3d_icon.ico"))
+        # printer port monitor
+        self.port_thread = PrinterPortMonitor(
+            self.rich_text_serial_log, self.gauge_test_progress, c3d_thread
+        )
+        # set font for text control
+        self.rich_text_serial_log.SetFont(self.text_ctrl_test_code.GetFont())
+        # set C3d port thread
+        self.c3d_port_thread = c3d_thread
+
+    def event_static_text_gcode_reference_click(self, _event):
+        wx.BeginBusyCursor()
+        import webbrowser
+
+        webbrowser.open("http://marlinfw.org/meta/gcode/")
+        wx.EndBusyCursor()
+
+    def event_button_run_test_click(self, event):
+        self.run_test()
+
+    def event_button_send_click(self, _event):
+        if not self.text_ctrl_message.GetValue():
+            return
+        if not self.port_thread.serial_port:
+            self.rich_text_serial_log.SetDefaultStyle(
+                wx.TextAttr(wx.Colour(wx.RED))
+            )
+            self.rich_text_serial_log.AppendText("Printer not connected\n")
+            return
+        command = self.text_ctrl_message.GetValue() + "\n"
+        self.port_thread.send_command(command)
+        self.text_ctrl_message.Clear()
+
+    def event_text_ctrl_message_enter(self, event):
+        self.event_button_send_click(event)
+
+    def event_close(self, event):
+        print("Handling EVT_CLOSE event")
+        # hide window immediately
+        print("Hiding window")
+        self.Hide()
+        # signal child thread to exit
+        # join child thread
+        print("Joining child thread")
+        self.port_thread.exit_and_join()
+        print("Closing window")
+        # destory this window
+        self.Destroy()
+        # process this event
+        event.Skip()
+
+    def run_test(self):
+        self.port_thread.run_test(self.text_ctrl_test_code.GetValue())
+
+    def event_text_ctrl_test_code_char(self, event):
+        # Ctrl+A pressed
+        if event.GetUnicodeKey() == 1:
+            self.text_ctrl_test_code.SetSelection(0, -1)
+            return
+        event.Skip()
+
+    def event_button_view_results_click(self, _event):
+        viewer = self.GetParent()
+        # get steps per mm for each channel
+        steps_per_mm = self.rich_text_serial_log.GetValue()
+        steps_per_mm = steps_per_mm.split("\n")
+        steps_per_mm = [x for x in steps_per_mm if x.startswith("echo:")]
+        steps_per_mm = [x for x in steps_per_mm if "M92" in x]
+        steps_per_mm = steps_per_mm[-1]
+        steps_per_mm = steps_per_mm[: (steps_per_mm + ";").index(";")]
+        steps_per_mm = [x for x in steps_per_mm.split(" ") if x]
+        steps_per_mm = {
+            x[0]: float(x[1:]) for x in steps_per_mm if x[0] in "XYZE"
+        }
+        viewer.event_button_interpret_click(None)
+        viewer.event_button_trim_click(None)
+        # scale POS/VEL/ACC channels by steps/mm
+        for channel in viewer.scope_panel.channels:
+            for signal in channel.signals:
+                data = signal.get_master_data()
+                if not isinstance(data, PlotData):
+                    continue
+                if signal.name[0] in steps_per_mm:
+                    scale = 1.0 / steps_per_mm[signal.name[0]]
+                    data.points = [(x, y * scale) for x, y in data.points]
+                    signal.create_simplified_data_sets()
+        viewer.event_button_zoom_all_click(None)
+        viewer.SetFocus()
 
 
 def run_gui():

@@ -10,6 +10,7 @@
 import wx
 import wx.xrc
 from ScopePanel import ScopePanel
+import wx.richtext
 
 ###########################################################################
 ## Class AnalysisWindowBase
@@ -197,7 +198,7 @@ class AnalysisWindowBase(wx.Frame):
 
         self.SetSizer(bSizer1)
         self.Layout()
-        self.status_bar = self.CreateStatusBar(1, wx.STB_SIZEGRIP, wx.ID_ANY)
+        self.status_bar = self.CreateStatusBar(3, wx.STB_SIZEGRIP, wx.ID_ANY)
         self.menu_bar = wx.MenuBar(0)
         self.menu_file = wx.Menu()
         self.menu_file_open = wx.MenuItem(
@@ -328,19 +329,25 @@ class AnalysisWindowBase(wx.Frame):
 ###########################################################################
 
 
-class TestWindowBase(wx.Dialog):
+class TestWindowBase(wx.Frame):
     def __init__(self, parent):
-        wx.Dialog.__init__(
+        wx.Frame.__init__(
             self,
             parent,
             id=wx.ID_ANY,
-            title=wx.EmptyString,
+            title=u"Test Runner",
             pos=wx.DefaultPosition,
-            size=wx.DefaultSize,
-            style=wx.DEFAULT_DIALOG_STYLE,
+            size=wx.Size(500, 300),
+            style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL,
         )
 
         self.SetSizeHints(wx.DefaultSize, wx.DefaultSize)
+        self.SetForegroundColour(
+            wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
+        )
+        self.SetBackgroundColour(
+            wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
+        )
 
         bSizer6 = wx.BoxSizer(wx.VERTICAL)
 
@@ -430,10 +437,46 @@ class TestWindowBase(wx.Dialog):
             wx.DefaultSize,
             wx.GA_HORIZONTAL,
         )
-        self.gauge_test_progress.SetValue(50)
+        self.gauge_test_progress.SetValue(0)
         sbSizer6.Add(self.gauge_test_progress, 0, wx.ALL | wx.EXPAND, 5)
 
         bSizer9.Add(sbSizer6, 0, wx.EXPAND, 5)
+
+        self.m_panel5 = wx.Panel(
+            self.m_panel3,
+            wx.ID_ANY,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.TAB_TRAVERSAL,
+        )
+        bSizer8 = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.button_run_test = wx.Button(
+            self.m_panel5,
+            wx.ID_ANY,
+            u"Run Test",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+        )
+        bSizer8.Add(self.button_run_test, 0, wx.ALL, 5)
+
+        bSizer8.Add((0, 0), 1, wx.EXPAND, 5)
+
+        self.button_view_results = wx.Button(
+            self.m_panel5,
+            wx.ID_ANY,
+            u"View",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+        )
+        bSizer8.Add(self.button_view_results, 0, wx.ALL, 5)
+
+        self.m_panel5.SetSizer(bSizer8)
+        self.m_panel5.Layout()
+        bSizer8.Fit(self.m_panel5)
+        bSizer9.Add(self.m_panel5, 0, wx.EXPAND | wx.ALL, 0)
 
         self.m_panel3.SetSizer(bSizer9)
         self.m_panel3.Layout()
@@ -451,20 +494,31 @@ class TestWindowBase(wx.Dialog):
             wx.StaticBox(self.m_panel4, wx.ID_ANY, u"Test G-code"), wx.VERTICAL
         )
 
-        self.m_textCtrl1 = wx.TextCtrl(
+        self.text_ctrl_test_code = wx.TextCtrl(
             sbSizer2.GetStaticBox(),
             wx.ID_ANY,
-            u"G21\nG90\nG92 E0 X0 Y0 Z0\nG0 X1\nG0 X0\nG0 X3\nG0 X0\nG0 X1\nG0 X0\nM400\n",
+            u"G21 ; set units to mm\nG90 ; set mode to absolute\nM92 X80 Y80 Z4000 E500 ; set steps/mm\nM203 X160 Y160 Z50 E200 ; set max feed rate (mm/s)\nM204 P1000 R1000 T1000 ; set acceleration\nM205 X0 Y0 Z0 T0 ; set jerk\nG92 E0 X0 Y0 Z0 ; set position to origin\nG0 X1\nG0 X0\nG0 X3\nG0 X0\nG0 X1\nG0 X0\nG0 X3\nG0 X0\nG0 X1\nG0 X0\nM400\n\nG0 X1\nG0 X0\nM400\n",
             wx.DefaultPosition,
             wx.DefaultSize,
             wx.TE_DONTWRAP | wx.TE_MULTILINE,
         )
-        sbSizer2.Add(self.m_textCtrl1, 1, wx.ALL | wx.EXPAND, 5)
+        self.text_ctrl_test_code.SetFont(
+            wx.Font(
+                9,
+                wx.FONTFAMILY_MODERN,
+                wx.FONTSTYLE_NORMAL,
+                wx.FONTWEIGHT_NORMAL,
+                False,
+                "Consolas",
+            )
+        )
+
+        sbSizer2.Add(self.text_ctrl_test_code, 1, wx.ALL | wx.EXPAND, 5)
 
         self.static_text_gcode_reference = wx.StaticText(
             sbSizer2.GetStaticBox(),
             wx.ID_ANY,
-            u"Reference manual",
+            u"http://marlinfw.org/meta/gcode/",
             wx.DefaultPosition,
             wx.DefaultSize,
             0,
@@ -494,70 +548,137 @@ class TestWindowBase(wx.Dialog):
         sbSizer2.Fit(self.m_panel4)
         bSizer7.Add(self.m_panel4, 1, wx.EXPAND | wx.ALL, 5)
 
-        bSizer6.Add(bSizer7, 1, wx.EXPAND, 5)
-
-        self.m_panel5 = wx.Panel(
+        self.m_panel41 = wx.Panel(
             self,
             wx.ID_ANY,
             wx.DefaultPosition,
             wx.DefaultSize,
             wx.TAB_TRAVERSAL,
         )
-        bSizer8 = wx.BoxSizer(wx.HORIZONTAL)
+        sbSizer8 = wx.StaticBoxSizer(
+            wx.StaticBox(self.m_panel41, wx.ID_ANY, u"Serial port monitor"),
+            wx.VERTICAL,
+        )
 
-        self.button_run_test = wx.Button(
-            self.m_panel5,
+        self.rich_text_serial_log = wx.TextCtrl(
+            sbSizer8.GetStaticBox(),
             wx.ID_ANY,
-            u"Run Test",
+            wx.EmptyString,
             wx.DefaultPosition,
             wx.DefaultSize,
-            0,
+            wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2,
         )
-        self.button_run_test.Enable(False)
+        sbSizer8.Add(self.rich_text_serial_log, 1, wx.ALL | wx.EXPAND, 5)
 
-        bSizer8.Add(self.button_run_test, 0, wx.ALL, 5)
-
-        self.m_button14 = wx.Button(
-            self.m_panel5,
+        self.rich_text_serial_log2 = wx.richtext.RichTextCtrl(
+            sbSizer8.GetStaticBox(),
             wx.ID_ANY,
-            u"MyButton",
+            wx.EmptyString,
             wx.DefaultPosition,
             wx.DefaultSize,
-            0,
+            wx.TE_READONLY
+            | wx.VSCROLL
+            | wx.HSCROLL
+            | wx.NO_BORDER
+            | wx.WANTS_CHARS,
         )
-        bSizer8.Add(self.m_button14, 0, wx.ALL, 5)
+        self.rich_text_serial_log2.Hide()
 
-        bSizer8.Add((0, 0), 1, wx.EXPAND, 5)
+        sbSizer8.Add(self.rich_text_serial_log2, 1, wx.EXPAND | wx.ALL, 5)
 
-        self.button_back = wx.Button(
-            self.m_panel5,
+        bSizer14 = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_ctrl_message = wx.TextCtrl(
+            sbSizer8.GetStaticBox(),
             wx.ID_ANY,
-            u"Done",
+            wx.EmptyString,
             wx.DefaultPosition,
             wx.DefaultSize,
-            0,
+            wx.TE_PROCESS_ENTER,
         )
-        bSizer8.Add(self.button_back, 0, wx.ALL, 5)
+        self.text_ctrl_message.SetFont(
+            wx.Font(
+                9,
+                wx.FONTFAMILY_MODERN,
+                wx.FONTSTYLE_NORMAL,
+                wx.FONTWEIGHT_NORMAL,
+                False,
+                "Consolas",
+            )
+        )
 
-        self.m_panel5.SetSizer(bSizer8)
-        self.m_panel5.Layout()
-        bSizer8.Fit(self.m_panel5)
-        bSizer6.Add(self.m_panel5, 0, wx.EXPAND | wx.ALL, 5)
+        bSizer14.Add(self.text_ctrl_message, 1, wx.ALL | wx.EXPAND, 5)
+
+        self.button_send = wx.Button(
+            sbSizer8.GetStaticBox(),
+            wx.ID_ANY,
+            u"Send",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.BU_EXACTFIT,
+        )
+        bSizer14.Add(self.button_send, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 0)
+
+        sbSizer8.Add(bSizer14, 0, wx.EXPAND, 0)
+
+        self.m_panel41.SetSizer(sbSizer8)
+        self.m_panel41.Layout()
+        sbSizer8.Fit(self.m_panel41)
+        bSizer7.Add(self.m_panel41, 3, wx.EXPAND | wx.ALL, 5)
+
+        bSizer6.Add(bSizer7, 1, wx.EXPAND, 5)
 
         self.SetSizer(bSizer6)
         self.Layout()
-        bSizer6.Fit(self)
 
         self.Centre(wx.BOTH)
 
         # Connect Events
+        self.Bind(wx.EVT_CLOSE, self.event_close)
+        self.button_run_test.Bind(
+            wx.EVT_BUTTON, self.event_button_run_test_click
+        )
+        self.button_view_results.Bind(
+            wx.EVT_BUTTON, self.event_button_view_results_click
+        )
+        self.text_ctrl_test_code.Bind(
+            wx.EVT_CHAR, self.event_text_ctrl_test_code_char
+        )
         self.static_text_gcode_reference.Bind(
             wx.EVT_LEFT_DOWN, self.event_static_text_gcode_reference_click
         )
+        self.rich_text_serial_log.Bind(
+            wx.EVT_CHAR, self.event_rich_text_serial_log_char
+        )
+        self.text_ctrl_message.Bind(
+            wx.EVT_TEXT_ENTER, self.event_text_ctrl_message_enter
+        )
+        self.button_send.Bind(wx.EVT_BUTTON, self.event_button_send_click)
 
     def __del__(self):
         pass
 
     # Virtual event handlers, overide them in your derived class
+    def event_close(self, event):
+        event.Skip()
+
+    def event_button_run_test_click(self, event):
+        event.Skip()
+
+    def event_button_view_results_click(self, event):
+        event.Skip()
+
+    def event_text_ctrl_test_code_char(self, event):
+        event.Skip()
+
     def event_static_text_gcode_reference_click(self, event):
+        event.Skip()
+
+    def event_rich_text_serial_log_char(self, event):
+        event.Skip()
+
+    def event_text_ctrl_message_enter(self, event):
+        event.Skip()
+
+    def event_button_send_click(self, event):
         event.Skip()
