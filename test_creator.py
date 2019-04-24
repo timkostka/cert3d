@@ -27,7 +27,7 @@ layer_width_mm = 0.5
 fill_ratio = 1.0
 
 # speed in mm/s
-speed_mm_s = 20.0
+speed_mm_s = 60.0
 
 # create arc
 radius = 100

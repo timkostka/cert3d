@@ -652,6 +652,46 @@ def packets_to_signals(packets, header: InfoHeader):
         signals.append(data)
     return signals
 
+def create_xy_vel(scope_panel: ScopePanel):
+    """Calculate and return the XY_VEL signal from X_VEL and Y_VEL."""
+    x_vel = None
+    y_vel = None
+    for channel in scope_panel.channels:
+        for signal in channel.signals:
+            if signal.name == 'X_VEL':
+                x_vel = signal.get_master_data()
+            if signal.name == 'Y_VEL':
+                y_vel = signal.get_master_data()
+    assert x_vel and y_vel
+    # get all x points
+    x_values = [x[0] for x in x_vel.points]
+    x_values.extend(x[0] for x in y_vel.points)
+    x_values = sorted(set(x_values))
+    # go through all points and find y values
+    x_vel_it = iter(x_vel.points)
+    y_vel_it = iter(y_vel.points)
+    x_vel_point = next(x_vel_it)
+    y_vel_point = next(y_vel_it)
+    # hold new points
+    points = []
+    for x in x_values:
+        # increase x_vel point until we're at/past this point
+        while x_vel_point[0] < x:
+            x_vel_point = next(x_vel_it)
+        while y_vel_point[0] < x:
+            y_vel_point = next(y_vel_it)
+        vel = math.sqrt(x_vel_point[1] ** 2 + y_vel_point[1] ** 2)
+        if points:
+            points.append((points[-1][0], vel))
+        points.append((x, vel))
+    data = PlotData()
+    data.name = 'XY_VEL'
+    data.start_time = x_vel.start_time
+    data.seconds_per_tick = x_vel.seconds_per_tick
+    data.points = points
+    signal = Signal(name="XY_VEL", color=wx.WHITE, data=data)
+    return signal
+
 
 def postprocess_signals(scope_panel: ScopePanel):
     """Postprocess step position from the DIR and STEP channels."""
@@ -677,7 +717,8 @@ def postprocess_signals(scope_panel: ScopePanel):
         acc_data = derivate_data(vel_data)
         new_signals.append(Signal(name + "_POS", wx.CYAN, 1, pos_data))
         new_signals.append(Signal(name + "_VEL", wx.CYAN, 1, vel_data))
-        new_signals.append(Signal(name + "_ACC", wx.CYAN, 1, acc_data))
+        # for now, don't calculate acceleration
+        # new_signals.append(Signal(name + "_ACC", wx.CYAN, 1, acc_data))
     # add new channels for the new signals
     for signal in new_signals:
         scope_panel.add_channel(ScopeChannel(height=240, signal=signal))
@@ -695,18 +736,27 @@ def postprocess_signals(scope_panel: ScopePanel):
     # set colors
     for channel in scope_panel.channels:
         channel.signals[0].color = colors[channel.signals[0].name[0]]
-    for c in "YZE":
-        for suffix in ["_POS", "_VEL", "_ACC"]:
+    for c in "YZ":
+        for suffix in ["_POS", "_VEL"]:
+            if c == 'E' and suffix == '_POS':
+                continue
             scope_panel.channels[name_to_index["X" + suffix]].add_signal(
                 scope_panel.channels[name_to_index[c + suffix]].signals[0]
             )
     # delete channels that don't start with X
     indices_to_delete = [
-        y for x, y in name_to_index.items() if x[0] != "X" and y >= 8
+        y for x, y in name_to_index.items() if x[0] != "X" and y >= 8 and x != 'E_VEL'
     ]
+    # delete channels
     indices_to_delete.sort(reverse=True)
     for i in indices_to_delete:
         del scope_panel.channels[i]
+    # create XY_VEL signal and add it to the X_VEL channel
+    xy_vel_signal = create_xy_vel(scope_panel)
+    for channel in scope_panel.channels:
+        if channel.signals[0].name == 'X_VEL':
+            channel.add_signal(xy_vel_signal)
+            break
 
 
 def interpret_data(filename):
