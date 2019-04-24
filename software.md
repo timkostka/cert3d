@@ -228,3 +228,14 @@ Once we have the `STEP` and `DIR` channels, we need to estimate the position, ve
 * Calculate `ACC` as the exact derivative of `VEL`.  Since VEL is piecewise linear, ACC is piecewise constant.
 
   * This produces some artifacts, which are real but undesired.  One way to remove these would be to apply a slew rate control to the signal.
+
+### Saving g-code tests
+
+In the Test Runner window, I need a method for saving many different tests.  I'll have a combo box populated with the name of each test along with a Save and Delete buttons.  They will be saved in the LOCALAPPDATA folder in the `tests.py` file in the following format:
+
+```
+test["basic_accel"] = ["G1 X0", "G1 X1"]
+...
+```
+
+I can then use `exec` to read these back in.

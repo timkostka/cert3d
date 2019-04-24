@@ -352,7 +352,7 @@ class TestWindowBase(wx.Frame):
             id=wx.ID_ANY,
             title=u"Test Runner",
             pos=wx.DefaultPosition,
-            size=wx.Size(500, 300),
+            size=wx.Size(704, 381),
             style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL,
         )
 
@@ -444,6 +444,17 @@ class TestWindowBase(wx.Frame):
             wx.VERTICAL,
         )
 
+        self.checkbox_view_when_complete = wx.CheckBox(
+            sbSizer6.GetStaticBox(),
+            wx.ID_ANY,
+            u"Automatically view when done",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+        )
+        self.checkbox_view_when_complete.SetValue(True)
+        sbSizer6.Add(self.checkbox_view_when_complete, 0, wx.ALL, 5)
+
         self.gauge_test_progress = wx.Gauge(
             sbSizer6.GetStaticBox(),
             wx.ID_ANY,
@@ -496,7 +507,7 @@ class TestWindowBase(wx.Frame):
         self.m_panel3.SetSizer(bSizer9)
         self.m_panel3.Layout()
         bSizer9.Fit(self.m_panel3)
-        bSizer7.Add(self.m_panel3, 1, wx.EXPAND | wx.ALL, 5)
+        bSizer7.Add(self.m_panel3, 0, wx.EXPAND | wx.ALL, 5)
 
         self.m_panel4 = wx.Panel(
             self,
@@ -508,6 +519,44 @@ class TestWindowBase(wx.Frame):
         sbSizer2 = wx.StaticBoxSizer(
             wx.StaticBox(self.m_panel4, wx.ID_ANY, u"Test G-code"), wx.VERTICAL
         )
+
+        bSizer13 = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.button_create_update = wx.Button(
+            sbSizer2.GetStaticBox(),
+            wx.ID_ANY,
+            u"Create/Update",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.BU_EXACTFIT,
+        )
+        bSizer13.Add(self.button_create_update, 0, 0, 5)
+
+        self.button_delete = wx.Button(
+            sbSizer2.GetStaticBox(),
+            wx.ID_ANY,
+            u"Delete",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            wx.BU_EXACTFIT,
+        )
+        bSizer13.Add(self.button_delete, 0, wx.LEFT, 5)
+
+        bSizer13.Add((0, 0), 1, wx.EXPAND, 5)
+
+        sbSizer2.Add(bSizer13, 0, wx.EXPAND, 0)
+
+        combo_box_test_choiceChoices = []
+        self.combo_box_test_choice = wx.ComboBox(
+            sbSizer2.GetStaticBox(),
+            wx.ID_ANY,
+            wx.EmptyString,
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            combo_box_test_choiceChoices,
+            0,
+        )
+        sbSizer2.Add(self.combo_box_test_choice, 0, wx.EXPAND | wx.TOP, 5)
 
         self.text_ctrl_test_code = wx.TextCtrl(
             sbSizer2.GetStaticBox(),
@@ -528,7 +577,23 @@ class TestWindowBase(wx.Frame):
             )
         )
 
-        sbSizer2.Add(self.text_ctrl_test_code, 1, wx.ALL | wx.EXPAND, 5)
+        sbSizer2.Add(
+            self.text_ctrl_test_code, 1, wx.BOTTOM | wx.EXPAND | wx.TOP, 5
+        )
+
+        bSizer11 = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.m_staticText9 = wx.StaticText(
+            sbSizer2.GetStaticBox(),
+            wx.ID_ANY,
+            u"Marlin: ",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+        )
+        self.m_staticText9.Wrap(-1)
+
+        bSizer11.Add(self.m_staticText9, 0, wx.ALL, 0)
 
         self.static_text_gcode_reference = wx.StaticText(
             sbSizer2.GetStaticBox(),
@@ -554,9 +619,53 @@ class TestWindowBase(wx.Frame):
             wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHT)
         )
 
-        sbSizer2.Add(
-            self.static_text_gcode_reference, 0, wx.ALL | wx.EXPAND, 5
+        bSizer11.Add(
+            self.static_text_gcode_reference, 0, wx.ALL | wx.EXPAND, 0
         )
+
+        sbSizer2.Add(bSizer11, 0, wx.EXPAND, 0)
+
+        bSizer12 = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.m_staticText10 = wx.StaticText(
+            sbSizer2.GetStaticBox(),
+            wx.ID_ANY,
+            u"Reprap: ",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+        )
+        self.m_staticText10.Wrap(-1)
+
+        bSizer12.Add(self.m_staticText10, 0, wx.ALL, 0)
+
+        self.static_text_reprap_link = wx.StaticText(
+            sbSizer2.GetStaticBox(),
+            wx.ID_ANY,
+            u"https://reprap.org/wiki/G-code",
+            wx.DefaultPosition,
+            wx.DefaultSize,
+            0,
+        )
+        self.static_text_reprap_link.Wrap(-1)
+
+        self.static_text_reprap_link.SetFont(
+            wx.Font(
+                9,
+                wx.FONTFAMILY_SWISS,
+                wx.FONTSTYLE_NORMAL,
+                wx.FONTWEIGHT_NORMAL,
+                True,
+                "Arial",
+            )
+        )
+        self.static_text_reprap_link.SetForegroundColour(
+            wx.SystemSettings.GetColour(wx.SYS_COLOUR_HIGHLIGHT)
+        )
+
+        bSizer12.Add(self.static_text_reprap_link, 0, wx.ALL, 0)
+
+        sbSizer2.Add(bSizer12, 0, wx.EXPAND, 0)
 
         self.m_panel4.SetSizer(sbSizer2)
         self.m_panel4.Layout()
@@ -581,7 +690,7 @@ class TestWindowBase(wx.Frame):
             wx.EmptyString,
             wx.DefaultPosition,
             wx.DefaultSize,
-            wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2,
+            wx.TE_DONTWRAP | wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_RICH2,
         )
         sbSizer8.Add(self.rich_text_serial_log, 1, wx.ALL | wx.EXPAND, 5)
 
@@ -639,7 +748,7 @@ class TestWindowBase(wx.Frame):
         self.m_panel41.SetSizer(sbSizer8)
         self.m_panel41.Layout()
         sbSizer8.Fit(self.m_panel41)
-        bSizer7.Add(self.m_panel41, 3, wx.EXPAND | wx.ALL, 5)
+        bSizer7.Add(self.m_panel41, 2, wx.EXPAND | wx.ALL, 5)
 
         bSizer6.Add(bSizer7, 1, wx.EXPAND, 5)
 
@@ -656,11 +765,27 @@ class TestWindowBase(wx.Frame):
         self.button_view_results.Bind(
             wx.EVT_BUTTON, self.event_button_view_results_click
         )
+        self.button_create_update.Bind(
+            wx.EVT_BUTTON, self.event_button_create_update_click
+        )
+        self.button_delete.Bind(wx.EVT_BUTTON, self.event_button_delete_click)
+        self.combo_box_test_choice.Bind(
+            wx.EVT_COMBOBOX, self.event_combo_selection_made
+        )
+        self.combo_box_test_choice.Bind(
+            wx.EVT_TEXT_ENTER, self.event_combo_on_text_enter
+        )
         self.text_ctrl_test_code.Bind(
             wx.EVT_CHAR, self.event_text_ctrl_test_code_char
         )
+        self.text_ctrl_test_code.Bind(
+            wx.EVT_TEXT, self.event_text_ctrl_test_code_on_text
+        )
         self.static_text_gcode_reference.Bind(
             wx.EVT_LEFT_DOWN, self.event_static_text_gcode_reference_click
+        )
+        self.static_text_reprap_link.Bind(
+            wx.EVT_LEFT_DOWN, self.event_static_text_reprap_reference_click
         )
         self.rich_text_serial_log.Bind(
             wx.EVT_CHAR, self.event_rich_text_serial_log_char
@@ -683,10 +808,28 @@ class TestWindowBase(wx.Frame):
     def event_button_view_results_click(self, event):
         event.Skip()
 
+    def event_button_create_update_click(self, event):
+        event.Skip()
+
+    def event_button_delete_click(self, event):
+        event.Skip()
+
+    def event_combo_selection_made(self, event):
+        event.Skip()
+
+    def event_combo_on_text_enter(self, event):
+        event.Skip()
+
     def event_text_ctrl_test_code_char(self, event):
         event.Skip()
 
+    def event_text_ctrl_test_code_on_text(self, event):
+        event.Skip()
+
     def event_static_text_gcode_reference_click(self, event):
+        event.Skip()
+
+    def event_static_text_reprap_reference_click(self, event):
         event.Skip()
 
     def event_rich_text_serial_log_char(self, event):

@@ -39,6 +39,9 @@ signal_names = [
 
 verbose = True
 
+# text added to a test when it's modified
+modified_suffix = " (modified)"
+
 # exit_children = False
 
 # flag to clear the log file
@@ -230,8 +233,8 @@ def derivate_data(data: PlotData, idle_corrections=False):
 def decode_stepper(
     step_data: BilevelData,
     dir_data: BilevelData,
-    correct_idle_time=True,
-    idle_time=0.010,
+    correct_idle_time=False,
+    idle_time=0.020,
 ):
     """Given the STEP and DIR channels, return step position as a PlotData."""
     # ensure the channels match in start and duration
@@ -309,7 +312,6 @@ all_colors = [wx.RED, wx.GREEN, wx.YELLOW, wx.Colour(255, 0, 255), wx.CYAN]
 
 
 class AnalysisWindow(AnalysisWindowBase):
-
     def __init__(self, parent):
         super(AnalysisWindow, self).__init__(parent)
         # set icon
@@ -1007,7 +1009,6 @@ class PrinterPortMonitor:
                 data = self.serial_port.read(self.serial_port.in_waiting)
                 text = data.decode("utf-8")
                 if text:
-                    print(text)
                     if "ok\n" in text:
                         self.ok_received = True
                     elif (
@@ -1072,9 +1073,19 @@ class PrinterPortMonitor:
     def find_printer_ports(self):
         """Return potential ports"""
         ports = []
+        # look for Arduino mega boards
         description = "Arduino Mega 2560 (COM"
         for port in serial.tools.list_ports.comports():
             if port.description.startswith(description):
+                ports.append(port)
+        # look for duet board
+        description = "USB Serial Device (COM"
+        for port in serial.tools.list_ports.comports():
+            if (
+                port.description.startswith(description)
+                and port.vid == 0x1D50
+                and port.pid == 0x60EC
+            ):
                 ports.append(port)
         return ports
 
@@ -1152,7 +1163,7 @@ class TestWindow(TestWindowBase):
     def __init__(self, parent, c3d_thread):
         super(TestWindow, self).__init__(parent)
         # set size
-        self.SetSize(asize(wx.Size(700, 400)))
+        self.SetSize(asize(wx.Size(1200, 600)))
         self.Center()
         # set icon
         self.SetIcon(wx.Icon("c3d_icon.ico"))
@@ -1164,12 +1175,130 @@ class TestWindow(TestWindowBase):
         self.rich_text_serial_log.SetFont(self.text_ctrl_test_code.GetFont())
         # set C3d port thread
         self.c3d_port_thread = c3d_thread
+        # hold list of tests
+        self.tests = {}
+        # load tests
+        self.load_tests()
+        self.update_test_combo_box()
+        # if test is selected, update it
+        self.event_combo_selection_made(None)
+
+    def save_tests(self):
+        """Save tests to disk."""
+        filename = os.path.join(os.environ["LOCALAPPDATA"], "cert3d")
+        os.makedirs(filename, exist_ok=True)
+        old_filename = os.path.join(filename, "tests_old.py")
+        filename = os.path.join(filename, "tests.py")
+        # rename file if it exists
+        if os.path.isfile(filename):
+            if os.path.isfile(old_filename):
+                os.remove(old_filename)
+            os.rename(filename, old_filename)
+        with open(filename, "w") as f:
+            for name in sorted(self.tests.keys()):
+                f.write(
+                    "tests['%s'] = '%s'\n"
+                    % (name, self.tests[name].replace("\n", "\\n"))
+                )
+        print("Saved %d tests to %s." % (len(self.tests), filename))
+
+    def load_tests(self):
+        """Load tests from disk and populate the combo."""
+        # erase tests
+        self.tests = {}
+        filename = os.path.join(os.environ["LOCALAPPDATA"], "cert3d")
+        os.makedirs(filename, exist_ok=True)
+        filename = os.path.join(filename, "tests.py")
+        if not os.path.isfile(filename):
+            print("Could not find test definition file.")
+            return
+        # populate tests
+        test_lines = open(filename, "r").readlines()
+        try:
+            for line in test_lines:
+                if not line:
+                    continue
+                exec(line, {"tests": self.tests})
+        except (SyntaxError, NameError):
+            print("ERROR: could not read tests")
+            self.tests = {}
+        print("We found %d tests." % len(self.tests))
+
+    def update_test_combo_box(self):
+        """Update combobox with current tests."""
+        # alias to get shorter name
+        combo = self.combo_box_test_choice
+        # clear all entries
+        combo.Dismiss()
+        combo.Clear()
+        # add entries
+        combo.Append(sorted(self.tests.keys()))
+        # if nothing is selected, select the first test
+        if combo.GetCount():
+            combo.SetSelection(0)
+
+    def event_button_create_update_click(self, event):
+        name = self.combo_box_test_choice.GetValue()
+        # if it's modified, erase the *
+        if name.endswith(modified_suffix):
+            name = name[: -len(modified_suffix)]
+            self.combo_box_test_choice.SetValue(name)
+        # name cannot be empty
+        if not name:
+            return
+        creating = name not in self.tests
+        if name in self.tests:
+            print("Overwriting test %s" % name)
+        else:
+            print("Creating new test %s" % name)
+        self.tests[name] = self.text_ctrl_test_code.GetValue()
+        if creating:
+            self.update_test_combo_box()
+            combo = self.combo_box_test_choice
+            combo.SetSelection(combo.GetItems().index(name))
+        # save changes
+        self.save_tests()
+
+    def event_button_delete_click(self, event):
+        name = self.combo_box_test_choice.GetValue()
+        if name.endswith(modified_suffix):
+            name = name[: -len(modified_suffix)]
+        if name in self.tests:
+            print("Deleting test %s" % name)
+            matching_test = (
+                self.text_ctrl_test_code.GetValue() == self.tests[name]
+            )
+            del self.tests[name]
+            self.update_test_combo_box()
+            if matching_test:
+                self.event_combo_selection_made(event)
+
+    def event_combo_on_text_enter(self, event):
+        self.event_button_create_update_click(event)
+
+    def event_combo_selection_made(self, event):
+        index = self.combo_box_test_choice.GetSelection()
+        if index == -1:
+            self.text_ctrl_test_code.SetValue("")
+            return
+        name = self.combo_box_test_choice.GetItems()[index]
+        assert name in self.tests
+        self.text_ctrl_test_code.SetValue(self.tests[name])
+        self.text_ctrl_test_code.SetInsertionPointEnd()
+        print("Test %s selected" % name)
 
     def event_static_text_gcode_reference_click(self, _event):
         wx.BeginBusyCursor()
         import webbrowser
 
-        webbrowser.open("http://marlinfw.org/meta/gcode/")
+        webbrowser.open(self.static_text_gcode_reference.GetLabel())
+        wx.EndBusyCursor()
+
+    def event_static_text_reprap_reference_click(self, _event):
+        wx.BeginBusyCursor()
+        import webbrowser
+
+        webbrowser.open(self.static_text_reprap_link.GetLabel())
         wx.EndBusyCursor()
 
     def event_button_run_test_click(self, event):
@@ -1196,6 +1325,8 @@ class TestWindow(TestWindowBase):
         # hide window immediately
         print("Hiding window")
         self.Hide()
+        # save tests
+        self.save_tests()
         # signal child thread to exit
         # join child thread
         print("Joining child thread")
@@ -1216,14 +1347,23 @@ class TestWindow(TestWindowBase):
             return
         event.Skip()
 
+    def event_text_ctrl_test_code_on_text(self, event):
+        value = self.combo_box_test_choice.GetValue()
+        if value in self.tests:
+            if self.text_ctrl_test_code.GetValue() != self.tests[value]:
+                self.combo_box_test_choice.SetValue(value + modified_suffix)
+
     def event_button_view_results_click(self, _event):
         viewer = self.GetParent()
         # get steps per mm for each channel
         steps_per_mm = self.rich_text_serial_log.GetValue()
         steps_per_mm = steps_per_mm.split("\n")
-        steps_per_mm = [x for x in steps_per_mm if x.startswith("echo:")]
+        # get lines with M92
         steps_per_mm = [x for x in steps_per_mm if "M92" in x]
+        # get text after M92
         steps_per_mm = steps_per_mm[-1]
+        steps_per_mm = steps_per_mm[steps_per_mm.index("M92") + 3 :]
+        # remove comments
         steps_per_mm = steps_per_mm[: (steps_per_mm + ";").index(";")]
         steps_per_mm = [x for x in steps_per_mm.split(" ") if x]
         steps_per_mm = {
