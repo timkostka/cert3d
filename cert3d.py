@@ -349,11 +349,14 @@ class AnalysisWindow(AnalysisWindowBase):
         # hide window immediately
         print("Hiding window")
         self.Hide()
-        # signal child thread to exit
+        # close children
+        for child in self.GetChildren():
+            child.Close()
         # join child thread
         print("Joining child thread")
         self.c3d_port_thread.exit_and_join()
         print("Closing window")
+
         # process this event
         event.Skip()
 
