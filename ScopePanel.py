@@ -129,11 +129,10 @@ class ScopeChannel:
         raise NotImplementedError
 
 
-class ScopePanel(wx.Panel):
+class ScopePanel(wx.ScrolledWindow):
     """A ScopePanel is a custom wxWidget to display oscilloscope-type data."""
 
     def __init__(self, parent, id_, position, size, style):
-        # print("Initializing!")
         super().__init__(parent, id_, position, size, style)
         # get estimated number of pixels per screen
         global screen_size
@@ -141,8 +140,6 @@ class ScopePanel(wx.Panel):
         # create popup menu for signal style
         self.style_popup_menu = self.create_style_menu()
         # create the context popup handler
-        self.Bind(wx.EVT_MENU, self.event_popup_menu_item_selected)
-        self.Bind(wx.EVT_CONTEXT_MENU, self.event_show_popup)
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         # list of channels
         self.channels = []
@@ -152,6 +149,8 @@ class ScopePanel(wx.Panel):
         self.minimum_pixels_per_second = 0.0
         # index of selected channel, or None
         self.selected_channel_index = None
+        # link to vertical scroll bar
+        self.vertical_scroll_bar = None
         # (channel_index, y_value) used during rearranging channels
         self.dragging_channel = None
         # width of the snaptime display
@@ -239,18 +238,16 @@ class ScopePanel(wx.Panel):
         self.SetBackgroundColour(wx.BLACK)
         self.SetForegroundColour(wx.WHITE)
 
+        self.Bind(wx.EVT_MENU, self.event_popup_menu_item_selected)
+        self.Bind(wx.EVT_CONTEXT_MENU, self.event_show_popup)
         self.Bind(wx.EVT_PAINT, self.event_paint)
-
         self.Bind(wx.EVT_LEFT_DOWN, self.event_mouse_left_button_down)
         self.Bind(wx.EVT_LEFT_UP, self.event_mouse_left_button_up)
         self.Bind(wx.EVT_MIDDLE_DOWN, self.event_mouse_middle_button_down)
         self.Bind(wx.EVT_MIDDLE_UP, self.event_mouse_middle_button_up)
         self.Bind(wx.EVT_MOTION, self.event_mouse_motion)
-
         self.Bind(wx.EVT_LEAVE_WINDOW, self.event_leave_window)
-
         self.Bind(wx.EVT_MOUSEWHEEL, self.event_mouse_wheel)
-
         self.Bind(wx.EVT_SIZE, self.event_on_size)
 
         self.adjust_channel_name_size()
@@ -264,6 +261,8 @@ class ScopePanel(wx.Panel):
 
     def redo_scroll_bars(self):
         """Show/hide scroll bars based on current state."""
+        self.SetScrollbars(1, 1, 1, self.desired_height)
+        return
         # if no data, hide scroll bars
         width, height = self.GetSize()
         if not self.channels:
@@ -334,9 +333,15 @@ class ScopePanel(wx.Panel):
             channel = ScopeChannel(height=40, signal=signal)
             # add this channel
             self.add_channel(channel)
+        for i in range(3):
+            name = 'FuzzyData%d' % i
+            data = FuzzyPlotData()
+            signal = Signal(name=name, color=wx.GREEN, thickness=1, data=data)
+            channel = ScopeChannel(height=120, signal=signal)
+            self.add_channel(channel)
         for name in ["X_POS", "Y_POS", "Z_POS", "E_POS"]:
             data = PlotData()
-            data.invent_data(2000)
+            data.invent_data(5000)
             signal = Signal(name=name, color=wx.CYAN, thickness=1, data=data)
             signal.create_simplified_data_sets()
             channel = ScopeChannel(height=120, signal=signal)
@@ -614,7 +619,7 @@ class ScopePanel(wx.Panel):
             if isinstance(signal.active_data, PlotData):
                 y = signal.active_data.points[i][1]
                 text += ", value=%g" % y
-            self.GetParent().status_bar.SetStatusText(text)
+            self.GetParent().GetParent().GetParent().status_bar.SetStatusText(text)
 
     def event_mouse_wheel(self, event):
         """Handle scrolling in/out via the mouse wheel."""
@@ -703,12 +708,14 @@ class ScopePanel(wx.Panel):
             high_values = []
             for signal in channel.signals:
                 data = signal.active_data
-                if not isinstance(data, PlotData):
-                    continue
                 if data.is_empty():
                     continue
-                low_values.append(min(x[1] for x in data.points))
-                high_values.append(max(x[1] for x in data.points))
+                if isinstance(data, PlotData):
+                    low_values.append(min(x[1] for x in data.points))
+                    high_values.append(max(x[1] for x in data.points))
+                elif isinstance(data, FuzzyPlotData):
+                    low_values.append(min(x[1] for x in data.points))
+                    high_values.append(max(x[2] for x in data.points))
             if low_values:
                 channel.low_value = min(low_values)
                 channel.high_value = max(high_values)
@@ -728,6 +735,7 @@ class ScopePanel(wx.Panel):
                 if data.get_point_count() < 2:
                     continue
                 if isinstance(data, PlotData):
+                    continue
                     if data.points[0][1] == data.points[1][1]:
                         first_activity.append(data.get_time_at_index(1))
                     else:
@@ -743,7 +751,7 @@ class ScopePanel(wx.Panel):
                     first_activity.append(data.get_time_at_index(1))
                     last_activity.append(data.get_time_at_index(-2))
                 else:
-                    raise ValueError("type %s is unexptected" % type(data))
+                    raise ValueError("type %s is unexpected" % type(data))
         # find values to trim to
         if first_activity:
             start_time = min(first_activity) - idle_ms / 1000.0
@@ -912,6 +920,7 @@ class ScopePanel(wx.Panel):
         """Handle the EVT_PAINT event."""
         self.find_dt()
         dc = wx.AutoBufferedPaintDC(self)
+        self.y_offset = self.GetViewStart()[1]
         # set drawing mode to overwrite
         dc.SetLogicalFunction(wx.COPY)
         # clear panel and fill with background color

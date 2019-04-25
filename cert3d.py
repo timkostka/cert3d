@@ -18,7 +18,7 @@ import serial.tools.list_ports
 import wx
 import wx.richtext
 
-from AnalysisWindowBase import AnalysisWindowBase, TestWindowBase
+from AnalysisWindowBase import AnalysisWindowBase
 from Data import *
 from ScopePanel import *
 
@@ -88,6 +88,18 @@ class PrinterGeometry:
 
     def parse_output(self, output):
         pass
+
+
+def human_file_size(byte_count):
+    """Return a human-readable string for the given number of bytes."""
+    if byte_count < 1000:
+        return "%d bytes" % byte_count
+    elif byte_count < 995000:
+        return "%.3g kB" % (byte_count / 1e3)
+    elif byte_count < 995000000:
+        return "%.3g MB" % (byte_count / 1e6)
+    else:
+        return "%.2g GB" % (byte_count / 1e9)
 
 
 def derivate_data_triangle_pulses(
@@ -334,29 +346,39 @@ class AnalysisWindow(AnalysisWindowBase):
         self.status_bar.SetStatusWidths(
             [-1] * self.status_bar.GetFieldsCount()
         )
-        # active test window, or None
-        self.test_window = None
-
-    def event_on_vertical_scroll(self, _event):
-        # get new scroll offset
-        new_offset = self.scroll_bar_vertical.GetThumbPosition()
-        if self.scope_panel.y_offset != new_offset:
-            self.scope_panel.y_offset = new_offset
-            self.scope_panel.Refresh()
+        # printer port monitor
+        self.printer_port_thread = PrinterPortMonitor(
+            self.rich_text_serial_log,
+            self.gauge_test_progress,
+            self.c3d_port_thread,
+        )
+        # set font for text control
+        self.rich_text_serial_log.SetFont(self.text_ctrl_test_code.GetFont())
+        # hold list of tests
+        self.tests = {}
+        # load tests
+        self.load_tests()
+        # update stuff in the combo box
+        self.update_test_combo_box()
+        # if test is selected, update it
+        self.event_combo_selection_made(None)
 
     def event_close(self, event):
         print("Handling EVT_CLOSE event")
         # hide window immediately
         print("Hiding window")
         self.Hide()
-        # close children
-        for child in self.GetChildren():
-            child.Close()
+        # save tests
+        self.save_tests()
+        # signal child thread to exit
         # join child thread
-        print("Joining child thread")
+        print("Joining C3D thread")
         self.c3d_port_thread.exit_and_join()
+        print("Joining printer port thread")
+        self.printer_port_thread.exit_and_join()
         print("Closing window")
-
+        # destory this window
+        self.Destroy()
         # process this event
         event.Skip()
 
@@ -433,48 +455,243 @@ class AnalysisWindow(AnalysisWindowBase):
         while self.c3d_port_thread.log_file:
             time.sleep(0.010)
         self.interpret_data_file(self.c3d_port_thread.log_filename)
-        return
-        signals = interpret_data()
-        if signals is None:
-            print("ERROR: could not interpret log file")
-            return
-        print([x.get_length() for x in signals])
-        # replace signal data with data from file
-        for index, this_data in enumerate(signals):
-            channel = c3d_gui_window.scope_panel.channels[index]
-            name = channel.signals[0].name
-            channel.signals = []
-            channel.add_signal(Signal(name=name, data=this_data))
-        del c3d_gui_window.scope_panel.channels[8:]
-        postprocess_signals(self.scope_panel)
-        self.scope_panel.zoom_to_all()
-        self.scope_panel.Refresh()
 
     def event_timer_update_ui(self, _event):
         # noinspection PyUnusedLocal
         port_name = "Disconnected"
         # noinspection PyUnusedLocal
         data_rate = "n/a"
+        # noinspection PyUnusedLocal
+        data_size = human_file_size(self.c3d_port_thread.bytes_read)
         try:
             port_name = "C3D on %s" % self.c3d_port_thread.serial_port.port
             data_rate = "%.3f Mbps" % self.c3d_port_thread.get_data_rate_mbps()
         except AttributeError:
             # this is triggered when the serial port is closed
             pass
-        if port_name != self.static_text_usb_port_status.GetLabel():
-            self.static_text_usb_port_status.SetLabel(port_name)
-        if data_rate != self.static_text_data_rate.GetLabel():
-            self.static_text_data_rate.SetLabel(data_rate)
+        if port_name != self.static_text_c3d_board_status.GetLabel():
+            self.static_text_c3d_board_status.SetLabel(port_name)
+        if data_rate != self.static_text_c3d_board_data_rate.GetLabel():
+            self.static_text_c3d_board_data_rate.SetLabel(data_rate)
+        if data_size != self.static_text_c3d_board_data_size.GetLabel():
+            self.static_text_c3d_board_data_size.SetLabel(data_size)
+        # update Printer port
+        # noinspection PyUnusedLocal
+        port_name = "Disconnected"
+        try:
+            port_name = (
+                "Printer on %s" % self.printer_port_thread.serial_port.port
+            )
+        except AttributeError:
+            # this is triggered when the serial port is closed
+            pass
+        if port_name != self.static_text_printer_board_connection.GetLabel():
+            self.static_text_printer_board_connection.SetLabel(port_name)
+        # if we just finished a test, open it
+        if (
+            self.printer_port_thread.test_just_finished
+            and not self.c3d_port_thread.log_file
+        ):
+            self.printer_port_thread.test_just_finished = False
+            if self.checkbox_view_when_complete.IsChecked():
+                self.event_button_view_results_click(None)
 
     def event_button_trim_click(self, _event):
         self.scope_panel.trim_signals()
         self.scope_panel.zoom_to_all()
 
     def event_button_open_test_window_click(self, event):
-        if not self.test_window:
-            self.test_window = TestWindow(self, self.c3d_port_thread)
-        self.test_window.Show()
-        self.test_window.SetFocus()
+        return
+        # if not self.test_window:
+        #    self.test_window = TestWindow(self, self.c3d_port_thread)
+        # self.test_window.Show()
+        # self.test_window.SetFocus()
+
+    def save_tests(self):
+        """Save tests to disk."""
+        filename = os.path.join(os.environ["LOCALAPPDATA"], "cert3d")
+        os.makedirs(filename, exist_ok=True)
+        old_filename = os.path.join(filename, "tests_old.py")
+        filename = os.path.join(filename, "tests.py")
+        # rename file if it exists
+        if os.path.isfile(filename):
+            if os.path.isfile(old_filename):
+                os.remove(old_filename)
+            os.rename(filename, old_filename)
+        with open(filename, "w") as f:
+            for name in sorted(self.tests.keys()):
+                f.write(
+                    "tests['%s'] = '%s'\n"
+                    % (name, self.tests[name].replace("\n", "\\n"))
+                )
+        print("Saved %d tests to %s." % (len(self.tests), filename))
+
+    def load_tests(self):
+        """Load tests from disk and populate the combo."""
+        # erase tests
+        self.tests = {}
+        filename = os.path.join(os.environ["LOCALAPPDATA"], "cert3d")
+        os.makedirs(filename, exist_ok=True)
+        filename = os.path.join(filename, "tests.py")
+        if not os.path.isfile(filename):
+            print("Could not find test definition file.")
+            return
+        # populate tests
+        test_lines = open(filename, "r").readlines()
+        try:
+            for line in test_lines:
+                if not line:
+                    continue
+                exec(line, {"tests": self.tests})
+        except (SyntaxError, NameError):
+            print("ERROR: could not read tests")
+            self.tests = {}
+        print("We found %d tests." % len(self.tests))
+
+    def update_test_combo_box(self):
+        """Update combobox with current tests."""
+        # alias to get shorter name
+        combo = self.combo_box_test_choice
+        # clear all entries
+        combo.Dismiss()
+        combo.Clear()
+        # add entries
+        combo.Append(sorted(self.tests.keys()))
+        # if nothing is selected, select the first test
+        if combo.GetCount():
+            combo.SetSelection(0)
+
+    def event_button_create_update_click(self, event):
+        name = self.combo_box_test_choice.GetValue()
+        # if it's modified, erase the *
+        if name.endswith(modified_suffix):
+            name = name[: -len(modified_suffix)]
+            self.combo_box_test_choice.SetValue(name)
+        # name cannot be empty
+        if not name:
+            return
+        creating = name not in self.tests
+        if name in self.tests:
+            print("Overwriting test %s" % name)
+        else:
+            print("Creating new test %s" % name)
+        self.tests[name] = self.text_ctrl_test_code.GetValue()
+        if creating:
+            self.update_test_combo_box()
+            combo = self.combo_box_test_choice
+            combo.SetSelection(combo.GetItems().index(name))
+        # save changes
+        self.save_tests()
+
+    def event_button_delete_click(self, event):
+        name = self.combo_box_test_choice.GetValue()
+        if name.endswith(modified_suffix):
+            name = name[: -len(modified_suffix)]
+        if name in self.tests:
+            print("Deleting test %s" % name)
+            matching_test = (
+                self.text_ctrl_test_code.GetValue() == self.tests[name]
+            )
+            del self.tests[name]
+            self.update_test_combo_box()
+            if matching_test:
+                self.event_combo_selection_made(event)
+
+    def event_combo_on_text_enter(self, event):
+        self.event_button_create_update_click(event)
+
+    def event_combo_selection_made(self, event):
+        index = self.combo_box_test_choice.GetSelection()
+        if index == -1:
+            self.text_ctrl_test_code.SetValue("")
+            return
+        name = self.combo_box_test_choice.GetItems()[index]
+        assert name in self.tests
+        self.text_ctrl_test_code.SetValue(self.tests[name])
+        self.text_ctrl_test_code.SetInsertionPointEnd()
+        print("Test %s selected" % name)
+
+    def event_static_text_gcode_reference_click(self, _event):
+        wx.BeginBusyCursor()
+        import webbrowser
+
+        webbrowser.open(self.static_text_gcode_reference.GetLabel())
+        wx.EndBusyCursor()
+
+    def event_static_text_reprap_reference_click(self, _event):
+        wx.BeginBusyCursor()
+        import webbrowser
+
+        webbrowser.open(self.static_text_reprap_link.GetLabel())
+        wx.EndBusyCursor()
+
+    def event_button_run_test_click(self, event):
+        self.run_test()
+
+    def event_button_send_click(self, _event):
+        if not self.text_ctrl_message.GetValue():
+            return
+        if not self.printer_port_thread.serial_port:
+            self.rich_text_serial_log.SetDefaultStyle(
+                wx.TextAttr(wx.Colour(wx.RED))
+            )
+            self.rich_text_serial_log.AppendText("Printer not connected\n")
+            return
+        command = self.text_ctrl_message.GetValue() + "\n"
+        self.printer_port_thread.send_command(command)
+        self.text_ctrl_message.Clear()
+
+    def event_text_ctrl_message_enter(self, event):
+        self.event_button_send_click(event)
+
+    def run_test(self):
+        self.printer_port_thread.run_test(self.text_ctrl_test_code.GetValue())
+
+    def event_text_ctrl_test_code_char(self, event):
+        # Ctrl+A pressed
+        if event.GetUnicodeKey() == 1:
+            self.text_ctrl_test_code.SetSelection(0, -1)
+            return
+        event.Skip()
+
+    def event_text_ctrl_test_code_on_text(self, event):
+        value = self.combo_box_test_choice.GetValue()
+        if value in self.tests:
+            if self.text_ctrl_test_code.GetValue() != self.tests[value]:
+                self.combo_box_test_choice.SetValue(value + modified_suffix)
+
+    def event_button_view_results_click(self, _event):
+        viewer = self
+        # get steps per mm for each channel
+        steps_per_mm = self.rich_text_serial_log.GetValue()
+        steps_per_mm = steps_per_mm.split("\n")
+        # get lines with M92
+        steps_per_mm = [x for x in steps_per_mm if "M92" in x]
+        # get text after M92
+        steps_per_mm = steps_per_mm[-1]
+        steps_per_mm = steps_per_mm[steps_per_mm.index("M92") + 3 :]
+        # remove comments
+        steps_per_mm = steps_per_mm[: (steps_per_mm + ";").index(";")]
+        steps_per_mm = [x for x in steps_per_mm.split(" ") if x]
+        steps_per_mm = {
+            x[0]: float(x[1:]) for x in steps_per_mm if x[0] in "XYZE"
+        }
+        viewer.event_button_interpret_click(None)
+        viewer.event_button_trim_click(None)
+        # scale POS/VEL/ACC channels by steps/mm
+        for channel in viewer.scope_panel.channels:
+            for signal in channel.signals:
+                data = signal.get_master_data()
+                if not isinstance(data, PlotData):
+                    continue
+                if signal.name[0] in steps_per_mm:
+                    scale = 1.0 / steps_per_mm[signal.name[0]]
+                    data.points = [(x, y * scale) for x, y in data.points]
+                    signal.create_simplified_data_sets()
+        viewer.event_button_zoom_all_click(None)
+        # set active tab to viewer
+        self.notebook.SetSelection(0)
+        # viewer.SetFocus()
 
 
 class InfoHeader:
@@ -655,15 +872,16 @@ def packets_to_signals(packets, header: InfoHeader):
         signals.append(data)
     return signals
 
+
 def create_xy_vel(scope_panel: ScopePanel):
     """Calculate and return the XY_VEL signal from X_VEL and Y_VEL."""
     x_vel = None
     y_vel = None
     for channel in scope_panel.channels:
         for signal in channel.signals:
-            if signal.name == 'X_VEL':
+            if signal.name == "X_VEL":
                 x_vel = signal.get_master_data()
-            if signal.name == 'Y_VEL':
+            if signal.name == "Y_VEL":
                 y_vel = signal.get_master_data()
     assert x_vel and y_vel
     # get all x points
@@ -688,7 +906,7 @@ def create_xy_vel(scope_panel: ScopePanel):
             points.append((points[-1][0], vel))
         points.append((x, vel))
     data = PlotData()
-    data.name = 'XY_VEL'
+    data.name = "XY_VEL"
     data.start_time = x_vel.start_time
     data.seconds_per_tick = x_vel.seconds_per_tick
     data.points = points
@@ -741,14 +959,16 @@ def postprocess_signals(scope_panel: ScopePanel):
         channel.signals[0].color = colors[channel.signals[0].name[0]]
     for c in "YZ":
         for suffix in ["_POS", "_VEL"]:
-            if c == 'E' and suffix == '_POS':
+            if c == "E" and suffix == "_POS":
                 continue
             scope_panel.channels[name_to_index["X" + suffix]].add_signal(
                 scope_panel.channels[name_to_index[c + suffix]].signals[0]
             )
     # delete channels that don't start with X
     indices_to_delete = [
-        y for x, y in name_to_index.items() if x[0] != "X" and y >= 8 and x != 'E_VEL'
+        y
+        for x, y in name_to_index.items()
+        if x[0] != "X" and y >= 8 and x != "E_VEL"
     ]
     # delete channels
     indices_to_delete.sort(reverse=True)
@@ -757,7 +977,7 @@ def postprocess_signals(scope_panel: ScopePanel):
     # create XY_VEL signal and add it to the X_VEL channel
     xy_vel_signal = create_xy_vel(scope_panel)
     for channel in scope_panel.channels:
-        if channel.signals[0].name == 'X_VEL':
+        if channel.signals[0].name == "X_VEL":
             channel.add_signal(xy_vel_signal)
             break
 
@@ -875,6 +1095,7 @@ class C3DPortMonitor:
         """Read and log data on the port until a command changes."""
         # open log file if it's not already open
         if self.serial_port and not self.log_file:
+            self.bytes_read = 0
             self.log_file = open(self.log_filename, "bw")
         while not self.exit_thread:
             time.sleep(0.001)
@@ -1013,6 +1234,8 @@ class PrinterPortMonitor:
         self.ok_received = False
         # if True, running commands
         self.test_mode = False
+        # set to True when a test is finished
+        self.test_just_finished = False
         # commands to send
         self.commands_to_send = []
         # progress gauge control
@@ -1040,16 +1263,17 @@ class PrinterPortMonitor:
             # send command if it's ready
             if self.test_mode and self.ok_received:
                 if not self.commands_to_send:
-                    self.test_mode = False
                     self.report_info("Test complete!")
                     print("We logged %d bytes." % self.c3d_thread.bytes_read)
-                    # stop logging
-                    time.sleep(0.25)
+                    # wait for log to clear, then stop it
+                    time.sleep(0.5)
                     self.c3d_thread.send_command(b"stop")
                     self.c3d_thread.log_to_file = False
                     self.progress_gauge.SetValue(
                         self.progress_gauge.GetRange()
                     )
+                    self.test_mode = False
+                    self.test_just_finished = True
                 else:
                     self.send_command(self.commands_to_send[0])
                     value = self.progress_gauge.GetRange() - len(
@@ -1208,234 +1432,6 @@ class PrinterPortMonitor:
                 print("ERROR: slave thread not exiting")
                 exit(1)
         self.thread.join()
-
-
-class TestWindow(TestWindowBase):
-    """The TestWindow is for running g-code tests."""
-
-    def __init__(self, parent, c3d_thread):
-        super(TestWindow, self).__init__(parent)
-        # set size
-        self.SetSize(asize(wx.Size(1200, 600)))
-        self.Center()
-        # set icon
-        self.SetIcon(wx.Icon("c3d_icon.ico"))
-        # printer port monitor
-        self.port_thread = PrinterPortMonitor(
-            self.rich_text_serial_log, self.gauge_test_progress, c3d_thread
-        )
-        # set font for text control
-        self.rich_text_serial_log.SetFont(self.text_ctrl_test_code.GetFont())
-        # set C3d port thread
-        self.c3d_port_thread = c3d_thread
-        # hold list of tests
-        self.tests = {}
-        # load tests
-        self.load_tests()
-        self.update_test_combo_box()
-        # if test is selected, update it
-        self.event_combo_selection_made(None)
-
-    def save_tests(self):
-        """Save tests to disk."""
-        filename = os.path.join(os.environ["LOCALAPPDATA"], "cert3d")
-        os.makedirs(filename, exist_ok=True)
-        old_filename = os.path.join(filename, "tests_old.py")
-        filename = os.path.join(filename, "tests.py")
-        # rename file if it exists
-        if os.path.isfile(filename):
-            if os.path.isfile(old_filename):
-                os.remove(old_filename)
-            os.rename(filename, old_filename)
-        with open(filename, "w") as f:
-            for name in sorted(self.tests.keys()):
-                f.write(
-                    "tests['%s'] = '%s'\n"
-                    % (name, self.tests[name].replace("\n", "\\n"))
-                )
-        print("Saved %d tests to %s." % (len(self.tests), filename))
-
-    def load_tests(self):
-        """Load tests from disk and populate the combo."""
-        # erase tests
-        self.tests = {}
-        filename = os.path.join(os.environ["LOCALAPPDATA"], "cert3d")
-        os.makedirs(filename, exist_ok=True)
-        filename = os.path.join(filename, "tests.py")
-        if not os.path.isfile(filename):
-            print("Could not find test definition file.")
-            return
-        # populate tests
-        test_lines = open(filename, "r").readlines()
-        try:
-            for line in test_lines:
-                if not line:
-                    continue
-                exec(line, {"tests": self.tests})
-        except (SyntaxError, NameError):
-            print("ERROR: could not read tests")
-            self.tests = {}
-        print("We found %d tests." % len(self.tests))
-
-    def update_test_combo_box(self):
-        """Update combobox with current tests."""
-        # alias to get shorter name
-        combo = self.combo_box_test_choice
-        # clear all entries
-        combo.Dismiss()
-        combo.Clear()
-        # add entries
-        combo.Append(sorted(self.tests.keys()))
-        # if nothing is selected, select the first test
-        if combo.GetCount():
-            combo.SetSelection(0)
-
-    def event_button_create_update_click(self, event):
-        name = self.combo_box_test_choice.GetValue()
-        # if it's modified, erase the *
-        if name.endswith(modified_suffix):
-            name = name[: -len(modified_suffix)]
-            self.combo_box_test_choice.SetValue(name)
-        # name cannot be empty
-        if not name:
-            return
-        creating = name not in self.tests
-        if name in self.tests:
-            print("Overwriting test %s" % name)
-        else:
-            print("Creating new test %s" % name)
-        self.tests[name] = self.text_ctrl_test_code.GetValue()
-        if creating:
-            self.update_test_combo_box()
-            combo = self.combo_box_test_choice
-            combo.SetSelection(combo.GetItems().index(name))
-        # save changes
-        self.save_tests()
-
-    def event_button_delete_click(self, event):
-        name = self.combo_box_test_choice.GetValue()
-        if name.endswith(modified_suffix):
-            name = name[: -len(modified_suffix)]
-        if name in self.tests:
-            print("Deleting test %s" % name)
-            matching_test = (
-                self.text_ctrl_test_code.GetValue() == self.tests[name]
-            )
-            del self.tests[name]
-            self.update_test_combo_box()
-            if matching_test:
-                self.event_combo_selection_made(event)
-
-    def event_combo_on_text_enter(self, event):
-        self.event_button_create_update_click(event)
-
-    def event_combo_selection_made(self, event):
-        index = self.combo_box_test_choice.GetSelection()
-        if index == -1:
-            self.text_ctrl_test_code.SetValue("")
-            return
-        name = self.combo_box_test_choice.GetItems()[index]
-        assert name in self.tests
-        self.text_ctrl_test_code.SetValue(self.tests[name])
-        self.text_ctrl_test_code.SetInsertionPointEnd()
-        print("Test %s selected" % name)
-
-    def event_static_text_gcode_reference_click(self, _event):
-        wx.BeginBusyCursor()
-        import webbrowser
-
-        webbrowser.open(self.static_text_gcode_reference.GetLabel())
-        wx.EndBusyCursor()
-
-    def event_static_text_reprap_reference_click(self, _event):
-        wx.BeginBusyCursor()
-        import webbrowser
-
-        webbrowser.open(self.static_text_reprap_link.GetLabel())
-        wx.EndBusyCursor()
-
-    def event_button_run_test_click(self, event):
-        self.run_test()
-
-    def event_button_send_click(self, _event):
-        if not self.text_ctrl_message.GetValue():
-            return
-        if not self.port_thread.serial_port:
-            self.rich_text_serial_log.SetDefaultStyle(
-                wx.TextAttr(wx.Colour(wx.RED))
-            )
-            self.rich_text_serial_log.AppendText("Printer not connected\n")
-            return
-        command = self.text_ctrl_message.GetValue() + "\n"
-        self.port_thread.send_command(command)
-        self.text_ctrl_message.Clear()
-
-    def event_text_ctrl_message_enter(self, event):
-        self.event_button_send_click(event)
-
-    def event_close(self, event):
-        print("Handling EVT_CLOSE event")
-        # hide window immediately
-        print("Hiding window")
-        self.Hide()
-        # save tests
-        self.save_tests()
-        # signal child thread to exit
-        # join child thread
-        print("Joining child thread")
-        self.port_thread.exit_and_join()
-        print("Closing window")
-        # destory this window
-        self.Destroy()
-        # process this event
-        event.Skip()
-
-    def run_test(self):
-        self.port_thread.run_test(self.text_ctrl_test_code.GetValue())
-
-    def event_text_ctrl_test_code_char(self, event):
-        # Ctrl+A pressed
-        if event.GetUnicodeKey() == 1:
-            self.text_ctrl_test_code.SetSelection(0, -1)
-            return
-        event.Skip()
-
-    def event_text_ctrl_test_code_on_text(self, event):
-        value = self.combo_box_test_choice.GetValue()
-        if value in self.tests:
-            if self.text_ctrl_test_code.GetValue() != self.tests[value]:
-                self.combo_box_test_choice.SetValue(value + modified_suffix)
-
-    def event_button_view_results_click(self, _event):
-        viewer = self.GetParent()
-        # get steps per mm for each channel
-        steps_per_mm = self.rich_text_serial_log.GetValue()
-        steps_per_mm = steps_per_mm.split("\n")
-        # get lines with M92
-        steps_per_mm = [x for x in steps_per_mm if "M92" in x]
-        # get text after M92
-        steps_per_mm = steps_per_mm[-1]
-        steps_per_mm = steps_per_mm[steps_per_mm.index("M92") + 3 :]
-        # remove comments
-        steps_per_mm = steps_per_mm[: (steps_per_mm + ";").index(";")]
-        steps_per_mm = [x for x in steps_per_mm.split(" ") if x]
-        steps_per_mm = {
-            x[0]: float(x[1:]) for x in steps_per_mm if x[0] in "XYZE"
-        }
-        viewer.event_button_interpret_click(None)
-        viewer.event_button_trim_click(None)
-        # scale POS/VEL/ACC channels by steps/mm
-        for channel in viewer.scope_panel.channels:
-            for signal in channel.signals:
-                data = signal.get_master_data()
-                if not isinstance(data, PlotData):
-                    continue
-                if signal.name[0] in steps_per_mm:
-                    scale = 1.0 / steps_per_mm[signal.name[0]]
-                    data.points = [(x, y * scale) for x, y in data.points]
-                    signal.create_simplified_data_sets()
-        viewer.event_button_zoom_all_click(None)
-        viewer.SetFocus()
 
 
 def run_gui():

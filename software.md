@@ -239,3 +239,17 @@ test["basic_accel"] = ["G1 X0", "G1 X1"]
 ```
 
 I can then use `exec` to read these back in.
+
+I implemented this.  It's nice.
+
+### Simplifying PlotData data
+
+We need a way to create a simplified data set of out PlotData.  Maybe we can have another Data type similar to PlotData, except it would have a range of values.  I have two ideas.
+
+* For each interval, draw a rectangle with a stipple interior over the range of values it can have.  This has one downside in that if the data is towards one side of the range, that information is lost in translation.
+
+* For each interval, find the mean value.  Draw a line connecting these mean values.  Also find the range of values and maybe draw a thick stippled line with this information.
+
+After looking, there is a DrawPolygon function.  I'm sure this could be useful.
+
+How can I calculate somewhat tight-fitting min and max value curves?

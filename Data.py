@@ -617,12 +617,49 @@ class PlotData(Data):
 
     def get_min_period_with_point_count(self, point_count):
         """Return the minimum period in seconds with X points."""
-        # TODO: implement this
-        return float("inf")
+        assert point_count > 1
+        if self.get_point_count() <= point_count:
+            return float("inf")
+        ticks = min(
+            y[0] - x[0]
+            for x, y in zip(
+                self.points[:-point_count], self.points[point_count:]
+            )
+        )
+        return ticks * self.seconds_per_tick
 
     def get_reduced_data(self):
         """Approximate the data with a reduced set and return it."""
-        return None
+        # reduce number of points by about this factor
+        scaling = 10
+        # get time range
+        start = self.get_time_at_index(0)
+        end = self.get_time_at_index(-1)
+        if start == end:
+            return None
+        # get time values at each index
+        point_count = self.get_point_count()
+        new_point_count = round(point_count / scaling)
+        if new_point_count < 2:
+            return None
+        last_index = 0
+        points = [(self.points[0][0], 0, 0)]
+        for i in range(1, new_point_count + 1):
+            time = start + (end - start) * i / new_point_count
+            next_index = self.find_closest_index(time)
+            # get min value
+            if next_index == last_index:
+                continue
+            else:
+                low = min(x[1] for x in self.points[last_index: next_index + 1])
+                high = max(x[1] for x in self.points[last_index: next_index + 1])
+            points.append((self.points[next_index][0], low, high))
+            last_index = next_index
+        data = FuzzyPlotData()
+        data.points = points
+        data.start_time = self.start_time
+        data.seconds_per_tick = self.seconds_per_tick
+        return data
 
     def draw_signal(
         self,
@@ -661,7 +698,14 @@ class PlotData(Data):
         pixels_per_value = (height - 1) / (low_value - high_value)
         x2 = None
         y2 = None
-        for point in self.points:
+        # find first index to draw
+        left_index = self.find_index_after(left_time)
+        if left_index:
+            left_index -= 1
+        # find last time
+        right_time = left_time + width / pixels_per_second
+        right_index = self.find_index_after(right_time)
+        for point in self.points[left_index: right_index + 1]:
             x1, y1 = x2, y2
             x2 = int(channel_left + point[0] * pixels_per_tick + 0.5)
             y2 = int(top + (point[1] - high_value) * pixels_per_value + 0.5)
@@ -673,6 +717,137 @@ class PlotData(Data):
             #if x2 >= left:
             #dc.DrawPoint(x2, y2)
             dc.DrawLine(x1, y1, x2, y2)
+        dc.DestroyClippingRegion()
+
+    def get_time_at_index(self, index):
+        """Return the time at the given data index."""
+        return self.start_time + self.points[index][0] * self.seconds_per_tick
+
+    def get_edge_near_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        index = self.find_closest_index(target_time)
+        if index is None:
+            return None
+        return self.get_time_at_index(index)
+
+
+class FuzzyPlotData(Data):
+    """The FuzzyPlotData holds reduced PlotData."""
+
+    def __init__(self):
+        # call higher level init
+        super(FuzzyPlotData, self).__init__()
+        # name of the data
+        self.name = "DATA"
+        # number of ticks per second
+        self.seconds_per_tick = 1.0 / 168e6
+        # starting time in seconds
+        self.start_time = 0.0
+        # xy plot data, where x is in ticks and ylow and yhigh are bounds for
+        # the previous region
+        # [x, ylow, yhigh]
+        self.points = []
+        self.invent_data()  # DEBUG
+
+    def is_empty(self):
+        return not self.points
+
+    def get_point_count(self):
+        return len(self.points)
+
+    def invent_data(self, point_count=2000):
+        """Populate with randomly generated data."""
+        self.start_time = 0.0
+        phi = random.uniform(0.0, math.tau)
+        period = random.uniform(20, 40)
+        self.points = []
+        for i in range(point_count):
+            low, high = sorted(random.random() for _ in range(2))
+            self.points.append((5 * i, low, high))
+
+    def get_closest_time(self, target_time):
+        """Return the edge time closest to the target time, or None."""
+        return None
+
+    def get_min_period_with_point_count(self, point_count):
+        """Return the minimum period in seconds with X points."""
+        # TODO: implement this
+        return float("inf")
+
+    def get_reduced_data(self):
+        """Approximate the data with a reduced set and return it."""
+        return None
+
+    def draw_signal(
+        self,
+        dc,
+        rect,
+        color,
+        thickness,
+        left_time,
+        pixels_per_second,
+        low_value,
+        high_value,
+    ):
+        """Draw the signal on the screen."""
+        # if it's empty, nothing to draw
+        if self.is_empty():
+            return
+        # set clipping region
+        dc.SetClippingRegion(*rect)
+        # set pen
+        dc.SetPen(wx.Pen(color, thickness))
+        # set brush
+        gray_color = wx.Colour(
+            (color.Red() + 1) * 2 // 3,
+            (color.Green() + 1) * 2 // 3,
+            (color.Blue() + 1) * 2 // 3,
+        )
+        gray_brush = wx.Brush(gray_color)
+        bmp = create_stipple_bitmap(gray_color)
+        gray_brush.SetStipple(bmp)
+        dc.SetBrush(gray_brush)
+        # get pixels per tick (x scaling)
+        pixels_per_tick = self.seconds_per_tick * pixels_per_second
+        # x pixel of start of channel data
+        channel_left = (
+            rect[0]
+            + (self.start_time - left_time) * pixels_per_second
+        )
+        # alias some things to shorter names
+        top = rect[1]
+        height = rect[3]
+        width = rect[2]
+        left = rect[0]
+        right = left + width - 1
+        # get pixels per value (y scaling)
+        pixels_per_value = (height - 1) / (low_value - high_value)
+        x2 = None
+        # find first index to draw
+        left_index = self.find_index_after(left_time)
+        if left_index:
+            left_index -= 1
+        # find last time
+        right_time = left_time + width / pixels_per_second
+        right_index = self.find_index_after(right_time)
+        for point in self.points[left_index: right_index + 1]:
+            x1 = x2
+            x2 = int(channel_left + point[0] * pixels_per_tick + 0.5)
+            low, high = point[1], point[2]
+            assert low <= high
+            y2high = int(top + (low - high_value) * pixels_per_value + 0.5)
+            y2low = int(top + (high - high_value) * pixels_per_value + 0.5)
+            # exit if we're drawing offscreen
+            if x1 is None:
+                continue
+            if x1 > right:
+                break
+            assert y2high >= y2low
+            if y2high == y2low:
+                dc.DrawLine(x1, y2low, x2, y2low)
+            else:
+                dc.DrawRectangle(x1, y2low, x2 - x1 + 1, y2high - y2low)
+            # dc.DrawLine(x1, y1, x2, y2)
         dc.DestroyClippingRegion()
 
     def get_time_at_index(self, index):

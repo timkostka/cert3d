@@ -27,13 +27,13 @@ layer_width_mm = 0.5
 fill_ratio = 1.0
 
 # speed in mm/s
-speed_mm_s = 60.0
+speed_mm_s = 80.0
 
 # create arc
 radius = 100
 
 # approximate length of each arc
-target_segment_length_mm = 1.0
+target_segment_length_mm = 0.2
 
 ##################
 # END OF OPTIONS #
