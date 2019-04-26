@@ -1065,7 +1065,6 @@ class C3DPortMonitor:
         delta_time = min(averaging_duration, history[-1][0] - history[0][0])
         assert delta_time > 0
         byte_count = history[-1][1] - history[0][1]
-        assert byte_count >= 0
         mbps = byte_count * 8e-6 / delta_time
         return mbps
 

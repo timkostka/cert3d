@@ -393,6 +393,8 @@ class ScopePanel(wx.ScrolledWindow):
         for i in range(1, 6):
             submenu.AppendRadioItem(-1, str(i))
         menu.AppendSubMenu(submenu, "&Thickness")
+        menu.Append(wx.MenuItem(menu, -1, "&Master data"))
+        menu.Append(wx.MenuItem(menu, -1, "&All master data"))
         return menu
 
     def update_desired_height(self):
@@ -1130,6 +1132,12 @@ class ScopePanel(wx.ScrolledWindow):
         # if it's numeric, change the thickness, else change the color
         if text.isdigit():
             signal.thickness = int(text)
+        elif text == '&Master data':
+            signal.active_data = signal.get_master_data()
+        elif text == '&All master data':
+            for channel in self.channels:
+                for this_signal in channel.signals:
+                    this_signal.active_data = this_signal.get_master_data()
         else:
             color = next(y for x, y in all_signal_colors if x == text)
             signal.color = color
