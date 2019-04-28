@@ -315,7 +315,7 @@ def find_c3d_ports():
     for port in serial.tools.list_ports.comports():
         if port.description.startswith(
             description
-        ) and port.serial_number.startswith("C3DR1"):
+        ) and port.serial_number.startswith("C3D"):
             c3d_ports.append(port)
     return c3d_ports
 
@@ -455,6 +455,9 @@ class AnalysisWindow(AnalysisWindowBase):
         while self.c3d_port_thread.log_file:
             time.sleep(0.010)
         self.interpret_data_file(self.c3d_port_thread.log_filename)
+        # trim it
+        self.event_button_trim_click(_event)
+        self.notebook.SetSelection(0)
 
     def event_timer_update_ui(self, _event):
         # noinspection PyUnusedLocal
@@ -499,6 +502,7 @@ class AnalysisWindow(AnalysisWindowBase):
     def event_button_trim_click(self, _event):
         self.scope_panel.trim_signals()
         self.scope_panel.zoom_to_all()
+        self.Refresh()
 
     def event_button_open_test_window_click(self, event):
         return
