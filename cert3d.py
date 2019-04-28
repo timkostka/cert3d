@@ -343,9 +343,7 @@ class AnalysisWindow(AnalysisWindowBase):
         # zoom to all
         self.scope_panel.zoom_to_all()
         # set scaling of status bar
-        self.status_bar.SetStatusWidths(
-            [-1] * self.status_bar.GetFieldsCount()
-        )
+        self.status_bar.SetStatusWidths([-1, asize(180), asize(180)])
         # printer port monitor
         self.printer_port_thread = PrinterPortMonitor(
             self.rich_text_serial_log,
@@ -461,35 +459,34 @@ class AnalysisWindow(AnalysisWindowBase):
 
     def event_timer_update_ui(self, _event):
         # noinspection PyUnusedLocal
-        port_name = "Disconnected"
-        # noinspection PyUnusedLocal
-        data_rate = "n/a"
-        # noinspection PyUnusedLocal
-        data_size = human_file_size(self.c3d_port_thread.bytes_read)
+        c3d_status = "C3D disconnected"
         try:
-            port_name = "C3D on %s" % self.c3d_port_thread.serial_port.port
-            data_rate = "%.3f Mbps" % self.c3d_port_thread.get_data_rate_mbps()
+            port = self.c3d_port_thread.serial_port.port
+            rate = "%.3f Mbps" % self.c3d_port_thread.get_data_rate_mbps()
+            c3d_status = 'C3D on %s (%s)' % (port, rate)
         except AttributeError:
             # this is triggered when the serial port is closed
             pass
-        if port_name != self.static_text_c3d_board_status.GetLabel():
-            self.static_text_c3d_board_status.SetLabel(port_name)
-        if data_rate != self.static_text_c3d_board_data_rate.GetLabel():
-            self.static_text_c3d_board_data_rate.SetLabel(data_rate)
-        if data_size != self.static_text_c3d_board_data_size.GetLabel():
-            self.static_text_c3d_board_data_size.SetLabel(data_size)
+        # update status bar
+        self.status_bar.SetStatusText(c3d_status, 2)
+        #if port_name != self.static_text_c3d_board_status.GetLabel():
+        #    self.static_text_c3d_board_status.SetLabel(port_name)
+        #if data_rate != self.static_text_c3d_board_data_rate.GetLabel():
+        #    self.static_text_c3d_board_data_rate.SetLabel(data_rate)
+        #if data_size != self.static_text_c3d_board_data_size.GetLabel():
+        #    self.static_text_c3d_board_data_size.SetLabel(data_size)
         # update Printer port
         # noinspection PyUnusedLocal
-        port_name = "Disconnected"
+        printer_status = "Printer disconnected"
         try:
-            port_name = (
-                "Printer on %s" % self.printer_port_thread.serial_port.port
-            )
+            port = self.printer_port_thread.serial_port.port
+            printer_status = "Printer on %s" % port
         except AttributeError:
             # this is triggered when the serial port is closed
             pass
-        if port_name != self.static_text_printer_board_connection.GetLabel():
-            self.static_text_printer_board_connection.SetLabel(port_name)
+        self.status_bar.SetStatusText(printer_status, 1)
+        #if port_name != self.static_text_printer_board_connection.GetLabel():
+        #    self.static_text_printer_board_connection.SetLabel(port_name)
         # if we just finished a test, open it
         if (
             self.printer_port_thread.test_just_finished
@@ -1098,6 +1095,7 @@ class C3DPortMonitor:
         """Read and log data on the port until a command changes."""
         # open log file if it's not already open
         if self.serial_port and not self.log_file:
+            self.data_rate_history = [(time.time(), 0)]
             self.bytes_read = 0
             self.log_file = open(self.log_filename, "bw")
         while not self.exit_thread:
@@ -1140,6 +1138,8 @@ class C3DPortMonitor:
                     )
                     self.serial_port = serial_port
                     print("Connected to C3D board on %s." % port.device)
+                    self.data_rate_history = [(time.time(), 0)]
+                    self.bytes_read = 0
                 except serial.serialutil.SerialException as e:
                     # There is a bug somewhere (win10 usbser?) that causes a
                     # call to win32.SetCommState from serialwin32.py:220 to

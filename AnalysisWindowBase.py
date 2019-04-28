@@ -43,7 +43,13 @@ class AnalysisWindowBase ( wx.Frame ):
         bSizer5 = wx.BoxSizer( wx.HORIZONTAL )
 
         self.notebook = wx.Notebook( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.NB_TOP )
+        self.notebook.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_WINDOW ) )
+        self.notebook.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNFACE ) )
+
         self.panel_viewer = wx.Panel( self.notebook, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        self.panel_viewer.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_WINDOW ) )
+        self.panel_viewer.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNFACE ) )
+
         bSizer22 = wx.BoxSizer( wx.VERTICAL )
 
         self.scope_panel = ScopePanel(self.panel_viewer, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL | wx.VSCROLL)
@@ -59,34 +65,11 @@ class AnalysisWindowBase ( wx.Frame ):
         bSizer7 = wx.BoxSizer( wx.HORIZONTAL )
 
         self.m_panel3 = wx.Panel( self.panel_test_runner, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        self.m_panel3.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNFACE ) )
+
         bSizer9 = wx.BoxSizer( wx.VERTICAL )
 
-        sbSizer1 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel3, wx.ID_ANY, u"Cert3D board" ), wx.VERTICAL )
-
-        self.static_text_c3d_board_status = wx.StaticText( sbSizer1.GetStaticBox(), wx.ID_ANY, u"Disconnected", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.static_text_c3d_board_status.Wrap( -1 )
-
-        sbSizer1.Add( self.static_text_c3d_board_status, 0, wx.ALL, 0 )
-
-        self.static_text_c3d_board_data_rate = wx.StaticText( sbSizer1.GetStaticBox(), wx.ID_ANY, u"Data rate: n/a", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.static_text_c3d_board_data_rate.Wrap( -1 )
-
-        sbSizer1.Add( self.static_text_c3d_board_data_rate, 0, wx.ALL, 0 )
-
-        self.static_text_c3d_board_data_size = wx.StaticText( sbSizer1.GetStaticBox(), wx.ID_ANY, u"Data size: n/a", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.static_text_c3d_board_data_size.Wrap( -1 )
-
-        sbSizer1.Add( self.static_text_c3d_board_data_size, 0, wx.ALL, 0 )
-
-
-        bSizer9.Add( sbSizer1, 1, wx.EXPAND, 5 )
-
-        sbSizer5 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel3, wx.ID_ANY, u"Printer board" ), wx.VERTICAL )
-
-        self.static_text_printer_board_connection = wx.StaticText( sbSizer5.GetStaticBox(), wx.ID_ANY, u"Connected on COM23", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.static_text_printer_board_connection.Wrap( -1 )
-
-        sbSizer5.Add( self.static_text_printer_board_connection, 0, wx.ALL, 0 )
+        sbSizer5 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel3, wx.ID_ANY, u"Status" ), wx.VERTICAL )
 
 
         bSizer9.Add( sbSizer5, 1, wx.EXPAND, 5 )
@@ -239,15 +222,8 @@ class AnalysisWindowBase ( wx.Frame ):
 
         bSizer52 = wx.BoxSizer( wx.VERTICAL )
 
-        self.obsolete_static_text_usb_port_status = wx.StaticText( self, wx.ID_ANY, u"Disconnected", wx.DefaultPosition, wx.DefaultSize, wx.ALIGN_CENTER_HORIZONTAL|wx.ST_NO_AUTORESIZE )
-        self.obsolete_static_text_usb_port_status.Wrap( -1 )
 
-        bSizer52.Add( self.obsolete_static_text_usb_port_status, 0, wx.ALL|wx.EXPAND, 0 )
-
-        self.obsolete_static_text_data_rate = wx.StaticText( self, wx.ID_ANY, u"n/a", wx.DefaultPosition, wx.DefaultSize, wx.ALIGN_CENTER_HORIZONTAL|wx.ST_NO_AUTORESIZE )
-        self.obsolete_static_text_data_rate.Wrap( -1 )
-
-        bSizer52.Add( self.obsolete_static_text_data_rate, 0, wx.ALL|wx.EXPAND, 0 )
+        bSizer52.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
         self.button_open_test_window = wx.Button( self, wx.ID_ANY, u"Test Window", wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer52.Add( self.button_open_test_window, 0, wx.ALL, 5 )
@@ -281,6 +257,9 @@ class AnalysisWindowBase ( wx.Frame ):
 
         self.button_exit = wx.Button( self, wx.ID_ANY, u"Exit", wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer52.Add( self.button_exit, 0, wx.ALL, 5 )
+
+
+        bSizer52.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
 
         bSizer5.Add( bSizer52, 0, wx.EXPAND, 5 )
