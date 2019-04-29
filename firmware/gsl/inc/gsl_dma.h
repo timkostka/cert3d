@@ -82,7 +82,7 @@ extern "C" {
 #define GSL_DMA_LocalStream DMA1_Stream0
 void DMA1_Stream0_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef SPI3
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_spi3_hspi.hdmarx);
@@ -109,7 +109,7 @@ void DMA1_Stream0_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA1_Stream1
 void DMA1_Stream1_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef TIM2
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_tim2_htim.hdma[TIM_DMA_ID_UPDATE]);
@@ -134,7 +134,7 @@ void DMA1_Stream1_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA1_Stream2
 void DMA1_Stream2_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef SPI3
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_spi3_hspi.hdmarx);
@@ -164,7 +164,7 @@ void DMA1_Stream2_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA1_Stream3
 void DMA1_Stream3_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef SPI2
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_spi2_hspi.hdmarx);
@@ -191,7 +191,7 @@ void DMA1_Stream3_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA1_Stream4
 void DMA1_Stream4_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef SPI2
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_spi2_hspi.hdmatx);
@@ -221,7 +221,7 @@ void DMA1_Stream4_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA1_Stream5
 void DMA1_Stream5_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef SPI3
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_spi3_hspi.hdmatx);
@@ -247,7 +247,7 @@ void DMA1_Stream5_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA1_Stream6
 void DMA1_Stream6_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef I2C1
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_i2c1_hi2c.hdmatx);
@@ -308,7 +308,7 @@ void DMA1_Stream7_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream0
 void DMA2_Stream0_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef ADC1
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_adc1_hadc.DMA_Handle);
@@ -332,7 +332,7 @@ void DMA2_Stream0_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream1
 void DMA2_Stream1_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef ADC3
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_adc3_hadc.DMA_Handle);
@@ -355,7 +355,7 @@ void DMA2_Stream1_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream2
 void DMA2_Stream2_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef TIM8
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_tim8_htim.hdma[TIM_DMA_ID_CC1]);
@@ -390,7 +390,7 @@ extern "C" {
 #define GSL_DMA_LocalStream DMA2_Stream3
 void DMA2_Stream3_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef ADC2
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_adc2_hadc.DMA_Handle);
@@ -417,7 +417,7 @@ void DMA2_Stream3_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream4
 void DMA2_Stream4_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef ADC1
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_adc1_hadc.DMA_Handle);
@@ -442,7 +442,7 @@ void DMA2_Stream4_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream5
 void DMA2_Stream5_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef SPI6
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_spi6_hspi.hdmatx);
@@ -466,7 +466,7 @@ void DMA2_Stream5_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream6
 void DMA2_Stream6_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef TIM1
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_tim1_htim.hdma[TIM_DMA_ID_CC1]);
@@ -490,7 +490,7 @@ void DMA2_Stream6_IRQHandler(void) {
 #define GSL_DMA_LocalStream DMA2_Stream7
 void DMA2_Stream7_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn " TOSTRING(GSL_DMA_LocalStream) "_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
 #ifdef USART1
   GSL_DMA_HandleIfMatch(GSL_DMA_LocalStream, gsl_usart1_huart.hdmatx);

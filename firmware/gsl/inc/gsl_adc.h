@@ -212,7 +212,7 @@ void GSL_ADC_Initialize(ADC_TypeDef * ADCx) {
     if (info->rank_config[i].channel >= 16) {
       continue;
     }
-    uint32_t mask = 1 << info->rank_config[i].channel;
+    uint32_t mask = 1U << info->rank_config[i].channel;
     if ((info->channel_init & mask) == 0) {
       GSL_PIN_Initialize(
           info->channel_pin[info->rank_config[i].channel],

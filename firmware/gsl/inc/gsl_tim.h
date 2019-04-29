@@ -752,7 +752,7 @@ extern "C" {
 
 void TIM1_BRK_TIM9_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM1_BRK_TIM9_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim1_htim);
   HAL_TIM_IRQHandler(&gsl_tim9_htim);
@@ -760,7 +760,7 @@ void TIM1_BRK_TIM9_IRQHandler(void) {
 #ifndef GSL_CUSTOMIRQHANDLER_TIM1_UP_TIM10
 void TIM1_UP_TIM10_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM1_UP_TIM10_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim1_htim);
   HAL_TIM_IRQHandler(&gsl_tim10_htim);
@@ -768,14 +768,14 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 #endif
 void TIM1_TRG_COM_TIM11_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM1_TRG_COM_TIM11_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim1_htim);
   HAL_TIM_IRQHandler(&gsl_tim11_htim);
 }
 void TIM1_CC_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM1_CC_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim1_htim);
 }
@@ -783,7 +783,7 @@ void TIM1_CC_IRQHandler(void) {
 #ifndef GSL_CUSTOMIRQHANDLER_TIM2
 void TIM2_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM2_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim2_htim);
 }
@@ -791,21 +791,21 @@ void TIM2_IRQHandler(void) {
 
 void TIM3_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM3_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim3_htim);
 }
 
 void TIM4_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM4_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim4_htim);
 }
 
 void TIM5_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM5_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim5_htim);
 }
@@ -813,7 +813,7 @@ void TIM5_IRQHandler(void) {
 #ifdef TIM6
 void TIM6_DAC_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM6_DAC_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim6_htim);
   // TODO: handle DAC underrun error here
@@ -823,7 +823,7 @@ void TIM6_DAC_IRQHandler(void) {
 #ifdef TIM7
 void TIM7_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM7_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim7_htim);
 }
@@ -832,7 +832,7 @@ void TIM7_IRQHandler(void) {
 #ifdef TIM8
 void TIM8_BRK_TIM12_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM8_BRK_TIM12_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim8_htim);
   HAL_TIM_IRQHandler(&gsl_tim12_htim);
@@ -841,7 +841,7 @@ void TIM8_BRK_TIM12_IRQHandler(void) {
 #ifdef TIM8
 void TIM8_UP_TIM13_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM8_UP_TIM13_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim8_htim);
   HAL_TIM_IRQHandler(&gsl_tim13_htim);
@@ -850,7 +850,7 @@ void TIM8_UP_TIM13_IRQHandler(void) {
 #ifdef TIM8
 void TIM8_TRG_COM_TIM14_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM8_TRG_COM_TIM14_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim8_htim);
   HAL_TIM_IRQHandler(&gsl_tim14_htim);
@@ -859,7 +859,7 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void) {
 #ifdef TIM8
 void TIM8_CC_IRQHandler(void) {
 #ifdef GSL_LOG_IRQ_ONCE
-  LOG_ONCE("\nIn TIM8_CC_IRQHandler");
+  LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
   HAL_TIM_IRQHandler(&gsl_tim8_htim);
 }

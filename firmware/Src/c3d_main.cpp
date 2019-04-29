@@ -4,64 +4,26 @@
 
 #include "c3d_includes.h"
 
-// output clock tick counts
-void C3D_OutputTimerTicks() {
-  return;
-
-  uint32_t c1 = TIM1->CNT;
-  uint32_t c2 = TIM2->CNT;
-  uint32_t c3 = TIM3->CNT;
-  uint32_t c4 = TIM4->CNT;
-  uint32_t c8 = TIM8->CNT;
-
-  LOG("\n TIM1->CNT=", c1);
-  LOG(",  TIM2->CNT=", c2);
-  LOG(",  TIM3->CNT=", c3);
-  LOG(",  TIM4->CNT=", c4);
-  LOG(",  TIM8->CNT=", c8);
-  LOG("\n TIM1->CR1=", GSL_OUT_Hex((uint16_t) TIM1->CR1));
-  LOG(",  TIM2->CR1=", GSL_OUT_Hex((uint16_t) TIM2->CR1));
-  LOG(",  TIM3->CR1=", GSL_OUT_Hex((uint16_t) TIM3->CR1));
-  LOG(",  TIM4->CR1=", GSL_OUT_Hex((uint16_t) TIM4->CR1));
-  LOG(",  TIM8->CR1=", GSL_OUT_Hex((uint16_t) TIM8->CR1));
-  LOG("\n TIM1->CR2=", GSL_OUT_Hex((uint16_t) TIM1->CR2));
-  LOG(",  TIM2->CR2=", GSL_OUT_Hex((uint16_t) TIM2->CR2));
-  LOG(",  TIM3->CR2=", GSL_OUT_Hex((uint16_t) TIM3->CR2));
-  LOG(",  TIM4->CR2=", GSL_OUT_Hex((uint16_t) TIM4->CR2));
-  LOG(",  TIM8->CR2=", GSL_OUT_Hex((uint16_t) TIM8->CR2));
-  LOG("\nTIM1->SMCR=", GSL_OUT_Hex((uint16_t) TIM1->SMCR));
-  LOG(", TIM2->SMCR=", GSL_OUT_Hex((uint16_t) TIM2->SMCR));
-  LOG(", TIM3->SMCR=", GSL_OUT_Hex((uint16_t) TIM3->SMCR));
-  LOG(", TIM4->SMCR=", GSL_OUT_Hex((uint16_t) TIM4->SMCR));
-  LOG(", TIM8->SMCR=", GSL_OUT_Hex((uint16_t) TIM8->SMCR));
-  LOG("\n  TIM1->SR=", GSL_OUT_Hex((uint16_t) TIM1->SR));
-  LOG(",   TIM2->SR=", GSL_OUT_Hex((uint16_t) TIM2->SR));
-  LOG(",   TIM3->SR=", GSL_OUT_Hex((uint16_t) TIM3->SR));
-  LOG(",   TIM4->SR=", GSL_OUT_Hex((uint16_t) TIM4->SR));
-  LOG(",   TIM8->SR=", GSL_OUT_Hex((uint16_t) TIM8->SR));
-  LOG("\n");
-
-}
-
 // called to process buffers
 // the first call to this after we start streaming should
 // have
 void C3D_ProcessBuffers(void) {
 
-  GSL_PIN_SetHigh(kPinA15);
-
-  uint32_t c1 = TIM1->CNT;
-  uint32_t c4 = c3d_master_timer->CNT;
-  uint32_t c8 = TIM8->CNT;
-
   // the first call to this will set c3d_process_count = 0
   // in this first call, we should expect tick values in the lower half of the timer
   ++c3d_process_count;
 
-  if (c3d_process_count < 2) {
+  /*uint32_t c1 = TIM1->CNT;
+  uint32_t c2 = TIM2->CNT;
+  uint32_t c4 = c3d_master_timer->CNT;
+  uint32_t c8 = TIM8->CNT;
+
+
+  if (c3d_process_count < 10) {
     LOG("\nCall ", c3d_process_count, " to C3D_ProcessBuffers()");
-    LOG("\n- TIM1->CNT=", c1, ", TIM4->CNT=", c4, ", TIM8->CNT=", c8);
-  }
+    LOG("\n- TIM1->CNT=", c1, ", TIM2->CNT=", c2, ", TIM4->CNT=", c4, ", TIM8->CNT=", c8);
+    LOG("\nADC->DMA->NDTR=", GSL_ADC_GetInfo(c3d_adc)->handle->DMA_Handle->Instance->NDTR);
+  }*/
 
   //LOG_ONCE("\nLogging first output with count=", c3d_process_count);
 
@@ -143,84 +105,22 @@ void C3D_ProcessBuffers(void) {
       c3d_usb_buffer.StageData(buffer_2, byte_count_2);
     }
 
-    continue;
-
-
-    // DEBUG
-    //if (count) {
-    //  LOG("\nFound ", count, " edges on channel ", s);
-    //}
-    // put values into the staging buffer
-    // if no values, just return
-    /*
-    uint8_t * buffer = nullptr;
-    uint16_t byte_count = 0;
-    monitor.PopMany(buffer, byte_count);
-    c3d_usb_buffer.StageData(buffer, byte_count);
-    byte_count += byte_count;
-    if (byte_count) {
-      monitor.PopMany(buffer, byte_count);
-      c3d_usb_buffer.StageData(buffer, byte_count);
-      byte_count += byte_count;
-    }*/
-
-    /*for (uint16_t i = 0; i < count; ++i) {
-      uint16_t value = monitor.Pop();
-      c3d_usb_buffer.StageVariable(value);
-      byte_count += 2;
-    }*/
   }
 
-  // output 0 ADC signals for now
-  uint8_t zero = 0;
-  c3d_usb_buffer.StageData(&zero, 1);
+  // add ADC signals
+  uint8_t sample_count = c3d_adc_dma_monitor.GetAvailable() / c3d_adc_channel_count;
+  c3d_usb_buffer.StageVariable(sample_count);
   ++byte_count;
-
-  // TODO: process ADC signals
-
-  // number of bytes added to the output buffer
-  //uint16_t bytes_added = 6 + 2 * c3d_signal_count;
-
-  /*uint16_t header = 0x0C77;
-  c3d_output_buffer.AddBytes((uint8_t *) &header, sizeof(header));
-  c3d_output_buffer.AddBytes((uint8_t *) &c3d_process_count, 2);
-
-  for (uint16_t s = 0; s < c3d_signal_count; ++s) {
-    // auto & signal = c3d_signal[s];
-    auto & buffer = c3d_signal_staging_buffer[s];
-    // add number of entries
-    c3d_output_buffer.AddBytes((uint8_t *) &c3d_signal_staging_buffer_length[s],
-        2);
-    c3d_edge_count += c3d_signal_staging_buffer_length[s];
-    // add tick numbers
-    c3d_output_buffer.AddBytes((uint8_t *) buffer,
-        c3d_signal_staging_buffer_length[s] * sizeof(*buffer));
-    //bytes_added += 2 * c3d_signal_staging_buffer_length[s];
-    // erase buffer
-    c3d_signal_staging_buffer_length[s] = 0;
-  }*/
-
-  //c3d_output_bits_per_process.Update(bytes_added * 8);
-
-  // move signals from staging buffer to output buffer if there is enough data
-  /*
-  for (uint16_t s = 0; s < c3d_signal_count; ++s) {
-    // auto & signal = c3d_signal[s];
-    auto & buffer = c3d_signal_staging_buffer[s];
-    if (c3d_signal_staging_buffer_length[s] < 64) {
-      continue;
+  for (uint16_t i = 0; i < sample_count; ++i) {
+    for (uint16_t s = 0; s < c3d_adc_channel_count; ++s) {
+      uint16_t value = c3d_adc_dma_monitor.Pop();
+      c3d_usb_buffer.StageVariable(value);
     }
-    // add sync word
-    uint16_t header[3] = {0x0C77, s, c3d_signal_staging_buffer_length[s]};
-    c3d_output_buffer.AddBytes((uint8_t *) header, 3 * sizeof(*header));
-    c3d_output_buffer.AddBytes((uint8_t *) buffer,
-        c3d_signal_staging_buffer_length[s] * sizeof(*buffer));
-    c3d_signal_staging_buffer_length[s] = 0;
-  }*/
+  }
+  byte_count += sample_count * c3d_adc_channel_count * sizeof(uint16_t);
 
   c3d_output_bits_per_process.Update(byte_count * 8);
 
-  GSL_PIN_SetLow(kPinA15);
 }
 
 // stop streaming data
@@ -233,11 +133,11 @@ void C3D_StopStreaming(void) {
   c3d_output_to_usb = false;
 
   // stop timers
-  CLEAR_BIT(TIM4->CR1, TIM_CR1_CEN);
-  CLEAR_BIT(TIM1->CR1, TIM_CR1_CEN);
-  CLEAR_BIT(TIM2->CR1, TIM_CR1_CEN);
-  CLEAR_BIT(TIM3->CR1, TIM_CR1_CEN);
-  CLEAR_BIT(TIM8->CR1, TIM_CR1_CEN);
+  CLEAR_BIT(c3d_master_timer->CR1, TIM_CR1_CEN);
+  CLEAR_BIT(c3d_adc_timer->CR1, TIM_CR1_CEN);
+  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
+    CLEAR_BIT(c3d_signal[i].TIMx->CR1, TIM_CR1_CEN);
+  }
 
   // clear out DMA info
   LOG("\nData stream stopped.");
@@ -271,10 +171,9 @@ void C3D_StartStreaming(void) {
   // reset stats
   c3d_process_count = 0xFFFFFFFF;
 
-  C3D_OutputTimerTicks();
-
   // set counters to 0
   c3d_master_timer->CNT = 0;
+  c3d_adc_timer->CNT = 0;
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     c3d_signal[i].TIMx->CNT = 0;
   }
@@ -294,15 +193,13 @@ void C3D_StartStreaming(void) {
     c3d_signal[i].TIMx->SR = 0;
   }
 
-  // clear trigger flag on slave timers
-  //CLEAR_BIT(c3d_adc_timer->SR, TIM_SR_TIF | TIM_SR_UIF);
-  //for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-  //  CLEAR_BIT(c3d_signal[i].TIMx->SR, TIM_SR_TIF | TIM_SR_UIF);
-  //}
-
-  // CLEAR_BIT(c3d_master_timer->SR, TIM_SR_UIF);
-
   // read all pending DMA values
+  {
+    auto & monitor = c3d_adc_dma_monitor;
+    while (monitor.GetAvailable()) {
+      monitor.Pop();
+    }
+  }
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     auto & monitor = c3d_signal_dma_monitor[i];
     while (monitor.GetAvailable()) {
@@ -312,12 +209,14 @@ void C3D_StartStreaming(void) {
 
   // ensure all timers are disabled
   ASSERT(READ_BIT(c3d_master_timer->CR1, TIM_CR1_CEN) == 0)
+  ASSERT(READ_BIT(c3d_adc_timer->CR1, TIM_CR1_CEN) == 0)
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     ASSERT(READ_BIT(c3d_signal[i].TIMx->CR1, TIM_CR1_CEN) == 0)
   }
 
   // ensure counters are at 0
   ASSERT(c3d_master_timer->CNT == 0);
+  ASSERT(c3d_adc_timer->CNT == 0);
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     ASSERT(c3d_signal[i].TIMx->CNT == 0);
   }
@@ -343,7 +242,7 @@ void C3D_StartStreaming(void) {
     }
   }
 
-  GSL_TIM_LogDetailedInformation();
+  //GSL_TIM_LogDetailedInformation();
 
   // start the master, which should start all chained timers
   GSL_TIM_Start(c3d_master_timer);
@@ -352,11 +251,10 @@ void C3D_StartStreaming(void) {
 
   // ensure all timers are enabled
   ASSERT(READ_BIT(c3d_master_timer->CR1, TIM_CR1_CEN))
+  ASSERT(READ_BIT(c3d_adc_timer->CR1, TIM_CR1_CEN))
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     ASSERT(READ_BIT(c3d_signal[i].TIMx->CR1, TIM_CR1_CEN))
   }
-
-  C3D_OutputTimerTicks();
 
 }
 
@@ -386,13 +284,13 @@ void C3D_SendInfoPacket(void) {
   c3d_usb_buffer.StageVariable((uint8_t) c3d_signal_count);
   c3d_usb_buffer.StageVariable((uint8_t) c3d_adc_channel_count);
   uint32_t ticks_per_adc_reading = clock * GSL_TIM_GetFrequency(c3d_adc_timer) / GSL_TIM_GetTickFrequency(c3d_adc_timer) + 0.5f;
-  LOG_ONCE("\nticks_per_adc_reading = ", ticks_per_adc_reading);
+  //LOG_ONCE("\nticks_per_adc_reading = ", ticks_per_adc_reading);
   c3d_usb_buffer.StageVariable(ticks_per_adc_reading);
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     uint32_t frequency = GSL_TIM_GetTickFrequency(c3d_signal[i].TIMx);
     c3d_usb_buffer.StageVariable(frequency);
     uint32_t overflow = frequency / GSL_TIM_GetFrequency(c3d_signal[i].TIMx) + 0.5f;
-    LIMITED_LOG(c3d_signal_count, "\noverflow ", i, " = ", overflow);
+    //LIMITED_LOG(c3d_signal_count, "\noverflow ", i, " = ", overflow);
     ASSERT(overflow == 65536 || overflow == 32768);
     c3d_usb_buffer.StageVariable(overflow);
   }
@@ -409,24 +307,17 @@ void C3D_SendInfoPacket(void) {
 }
 
 // a replacement for HAL_TIM_IC_Start_DMA without starting the timer
-HAL_StatusTypeDef QUIETLY_HAL_TIM_IC_Start_DMA(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t *pData, uint16_t Length)
-{
+HAL_StatusTypeDef QUIETLY_HAL_TIM_IC_Start_DMA(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t *pData, uint16_t Length) {
   /* Check the parameters */
   assert_param(IS_TIM_CCX_INSTANCE(htim->Instance, Channel));
   assert_param(IS_TIM_DMA_CC_INSTANCE(htim->Instance));
 
-  if((htim->State == HAL_TIM_STATE_BUSY))
-  {
+  if (htim->State == HAL_TIM_STATE_BUSY) {
     return HAL_BUSY;
-  }
-  else if((htim->State == HAL_TIM_STATE_READY))
-  {
-    if((pData == 0U) && (Length > 0))
-    {
+  } else if (htim->State == HAL_TIM_STATE_READY) {
+    if ((pData == 0U) && (Length > 0)) {
       return HAL_ERROR;
-    }
-    else
-    {
+    } else {
       htim->State = HAL_TIM_STATE_BUSY;
     }
   }
@@ -529,82 +420,35 @@ void C3D_ProcessCommands(uint8_t * buffer, uint16_t length) {
       return;
     }
   }
-  LOG("\nERROR: Ignoring unknown command.");
+  LOG("\nERROR: Ignoring unknown command of length", length, ".");
   GSL_OUT_LogHex(buffer, (length > 10) ? 10 : length);
 }
 }
 
-void C3D_DebugTestCallback(void) {
-  static uint32_t calls = 0;
-  ++calls;
-  if (calls < 10) {
-    C3D_OutputTimerTicks();
-  }
-}
-
-
-void C3D_DebugTest(void) {
-  gsl_tim1_htim.Init.Period = 65535;
-  gsl_tim1_htim.Init.Prescaler = 3;
-  //gsl_tim2_htim.Init.Period = 30000;
-  //gsl_tim2_htim.Init.Prescaler = 0;
-  GSL_TIM_SetFrequency(TIM2, 1e3f, 0.1f);
-  gsl_tim3_htim.Init.Period = 32767;
-  gsl_tim3_htim.Init.Prescaler = 3;
-  gsl_tim4_htim.Init.Period = 32768 / 2 - 1;
-  gsl_tim4_htim.Init.Prescaler = 3;
-  gsl_tim8_htim.Init.Period = 65535;
-  gsl_tim8_htim.Init.Prescaler = 3;
-
-
-  LOG("\n\nAll timers should be off");
-  C3D_DebugTestCallback();
-
-  LOG("\n\nSetting update callback on master timer");
-  GSL_TIM_SetUpdateCallback(c3d_master_timer, C3D_DebugTestCallback);
-  GSL_DEL_MS(1);
-  C3D_DebugTestCallback();
-
-
-  // set update callback on master timer
-  ASSERT(c3d_master_timer == TIM4);
-
-  // set up the timer to send trigger on update
-  LOG("\n\nSetting master to output TRGO signal");
-  //GSL_TIM_EnableTriggerOutput(c3d_master_timer);
-  // clear any pending interrupts
-  //c3d_master_timer->SR = 0;
-  /*
-  {
-    // send enable as trigger output
-    TIM_MasterConfigTypeDef config;
-    config.MasterOutputTrigger = TIM_TRGO_UPDATE;
-    config.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
-    HAL_TIMEx_MasterConfigSynchronization(GSL_TIM_GetInfo(c3d_master_timer)->handle, &config);
-  }*/
-  GSL_DEL_MS(1);
-  C3D_DebugTestCallback();
-
-  LOG("\n\nSetting up slaves to trigger from master");
-  GSL_TIM_WaitForTrigger(TIM1, GSL_TIM_GetInternalTrigger(TIM1, c3d_master_timer));
-  GSL_TIM_WaitForTrigger(TIM2, GSL_TIM_GetInternalTrigger(TIM2, c3d_master_timer));
-  GSL_TIM_WaitForTrigger(TIM3, GSL_TIM_GetInternalTrigger(TIM3, c3d_master_timer));
-  GSL_TIM_WaitForTrigger(TIM8, GSL_TIM_GetInternalTrigger(TIM8, c3d_master_timer));
-  GSL_DEL_MS(1);
-  C3D_DebugTestCallback();
-
-  LOG("\n\nStarting master timer");
-  GSL_TIM_Start(c3d_master_timer);
-
-  GSL_DEL_MS(500);
-  GSL_TIM_LogDescription();
-
-  while (1);
-
-}
-
 // main entry point for the C3D program
 void C3D_Main(void) {
+
+  GSL_DEL_Initialize();
+
+  GSL_PRO_Reset();
+
+  LOG("\n\n\n");
+  for (uint16_t line = 0; line < 3; ++line) {
+    LOG("\n");
+    for (uint16_t i = 0; i < 79; ++i) {
+      LOG("*");
+    }
+  }
+  LOG("\n\n\n");
+  GSL_PRO_Add("Startup");
+
+  GSL_GEN_GetBusyTime(-0.010f);
+  GSL_GEN_GetBusyTime(-0.010f);
+  GSL_GEN_GetBusyTime(-0.010f);
+  GSL_PRO_Add("Startup - Busy time");
+
+  GSL_GEN_LogBanner();
+  GSL_PRO_Add("Startup - Banner generation");
 
   GSL_PIN_SetHigh(kPinB6);
   GSL_PIN_Initialize(kPinB6, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
@@ -633,14 +477,23 @@ void C3D_Main(void) {
         GSL_BUF_Create(c3d_signal[i].buffer_capacity * sizeof(uint16_t));
   }
 
-  // initialize DMA monitors
+  // initialize signal DMA monitors
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     auto & signal = c3d_signal[i];
     auto & monitor = c3d_signal_dma_monitor[i];
     monitor.buffer_capacity = signal.buffer_capacity;
     monitor.buffer = signal.buffer;
-    monitor.last_NDTR = signal.buffer_capacity;
     monitor.dma_stream = signal.dma_stream;
+    monitor.last_NDTR = monitor.buffer_capacity;
+  }
+
+  // initialize ADC DMA monitor
+  {
+    auto & monitor = c3d_adc_dma_monitor;
+    monitor.buffer_capacity = c3d_adc_buffer_capacity;
+    monitor.buffer = c3d_adc_buffer;
+    monitor.last_NDTR = monitor.buffer_capacity;
+    monitor.dma_stream = GSL_ADC_GetInfo(c3d_adc)->handle->DMA_Handle->Instance;
   }
 
   // initialize timer pins
@@ -653,6 +506,7 @@ void C3D_Main(void) {
   }
 
   // enable the timer clocks
+  GSL_TIM_EnableClock(c3d_adc_timer);
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     GSL_TIM_EnableClock(c3d_signal[i].TIMx);
   }
@@ -697,6 +551,25 @@ void C3D_Main(void) {
     }
     HAL_RUN(HAL_TIM_IC_Init(info->handle));
     // set timer to trigger off of master timer's TRGO signal
+    {
+      TIM_SlaveConfigTypeDef slave_config;
+      slave_config.SlaveMode = TIM_SLAVEMODE_TRIGGER;
+      slave_config.InputTrigger = GSL_TIM_GetInternalTrigger(TIMx, c3d_master_timer);
+      slave_config.TriggerPolarity = TIM_TRIGGERPOLARITY_NONINVERTED;
+      slave_config.TriggerPrescaler = TIM_TRIGGERPRESCALER_DIV1;
+      slave_config.TriggerFilter = 0;
+      HAL_RUN(HAL_TIM_SlaveConfigSynchronization(info->handle, &slave_config));
+    }
+  }
+
+  // set up ADC timer
+  {
+    auto TIMx = c3d_adc_timer;
+    auto info = GSL_TIM_GetInfo(c3d_adc_timer);
+    // set freqency
+    GSL_TIM_SetFrequency(c3d_adc_timer, c3d_adc_frequency, 0.1f);
+    HAL_RUN(HAL_TIM_Base_Init(info->handle));
+    // set to trigger from master TRGO signal
     {
       TIM_SlaveConfigTypeDef slave_config;
       slave_config.SlaveMode = TIM_SLAVEMODE_TRIGGER;
@@ -765,47 +638,25 @@ void C3D_Main(void) {
     htim_base->Instance->CR1 &= ~(TIM_CR1_CEN);
   }
 
-  // set up ADC timer
-  GSL_TIM_SetFrequency(c3d_adc_timer, c3d_adc_frequency, 0.1f);
-
   // set up the ADC to trigger on TIM2 TRGO signal
-  /*
-  ASSERT(c3d_master_timer == TIM2);
+  ASSERT(c3d_adc_timer == TIM2);
   GSL_ADC_SetTrigger(c3d_adc, ADC_EXTERNALTRIGCONV_T2_TRGO);
+  //GSL_ADC_SetTrigger(c3d_adc, ADC_SOFTWARE_START); // DEBUG
   // add ADC channels
+  GSL_TIM_EnableTriggerUpdate(c3d_adc_timer);
   for (uint16_t i = 0; i < c3d_adc_channel_count; ++i) {
     GSL_ADC_AddChannel(c3d_adc, c3d_adc_channel[i]);
   }
   // start the DMA output
+  // TODO: fix so it takes # values instead of bytes
   GSL_ADC_Start_DMA_Circular(
       c3d_adc, c3d_adc_buffer, c3d_adc_buffer_capacity * sizeof(*c3d_adc_buffer));
-  */
-
-  // initialize pin to drive TIM1->CH1
-  GSL_PIN_SetLow(kPinG15);
-  GSL_PIN_Initialize(kPinG15, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-  GSL_PIN_SetLow(kPinB3);
-  GSL_PIN_Initialize(kPinB3, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-
-  // DEBUG
-  GSL_UART_Initialize(UART4);
-
-  // DEBUG
-  GSL_PIN_Initialize(kPinA15, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-
-  // GSL_TIM_LogDetailedInformation();
-
-  // GSL_TIM_LogDescription();
-
-  C3D_OutputTimerTicks();
-
-  // disable most interrupts from TIM
-  //hdma->Instance->CR  |= DMA_IT_TC | DMA_IT_TE | DMA_IT_DME;
-  //hdma->Instance->FCR |= DMA_IT_FE;
-
+  // disable interrupt generation
+  CLEAR_BIT(GSL_ADC_GetInfo(c3d_adc)->hdma->Instance->CR, DMA_SxCR_TCIE);
+  CLEAR_BIT(GSL_ADC_GetInfo(c3d_adc)->hdma->Instance->CR, DMA_SxCR_HTIE);
 
   // now just output stuff
-  while (1) {
+  while (true) {
     // enable streaming if requested
     if (c3d_start_streaming_flag) {
       C3D_StartStreaming();
@@ -849,17 +700,19 @@ void C3D_Main(void) {
 
     // make sure USB is no longer active
     {
-      USBD_CDC_HandleTypeDef *hcdc =
+      auto hcdc =
           (USBD_CDC_HandleTypeDef*) hUsbDeviceHS.pClassData;
       if (hcdc->TxState != 0) {
         continue;
       }
     }
+
     // if a chunk is frozen, thaw it
     if (c3d_usb_buffer.frozen) {
       LOG_ONCE("\nThawing first chunk");
       c3d_usb_buffer.Thaw();
     }
+
     // if first chunk is no longer active, send it out
     if (c3d_usb_buffer.first_chunk != c3d_usb_buffer.active_chunk) {
       LOG_ONCE("\nSending first chunk");

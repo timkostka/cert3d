@@ -23,6 +23,12 @@ const uint32_t c3d_adc_channel[] = {
     ADC_CHANNEL_9,
 };
 
+// timer to use to trigger ADC readings
+TIM_TypeDef * const c3d_adc_timer = TIM2;
+
+// approximate frequency of ADC readings
+const float c3d_adc_frequency = 1000.0f;
+
 // high resistor on adc resistor divider
 const float c3d_adc_high_resistor = 7500.0f;
 
@@ -84,6 +90,9 @@ const uint16_t c3d_signal_count = sizeof(c3d_signal) / sizeof(*c3d_signal);
 // monitor for each signal DMA channel
 C3D_DMA_Monitor<uint16_t> c3d_signal_dma_monitor[c3d_signal_count];
 
+// monitor for the ADC DMA channel
+C3D_DMA_Monitor<uint16_t> c3d_adc_dma_monitor;
+
 // number of times we processed data
 uint32_t c3d_process_count = 0;
 
@@ -136,12 +145,6 @@ bool c3d_debug_flag = false;
 
 // if True, will ignore data sent to USB
 bool c3d_ignore_usb_output = false;
-
-// timer to use to trigger ADC readings
-TIM_TypeDef * const c3d_adc_timer = TIM2;
-
-// approximate frequency of ADC readings
-const float c3d_adc_frequency = 1000.0f;
 
 // trigger to start streaming
 bool c3d_start_streaming_flag = false;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <stdint.h>
-#include <limits.h>
+#include <cstdint>
+#include <climits>
 
 #include "gsl_includes.h"
 
@@ -17,7 +17,7 @@ GSL_ERROR_HandlerFunction gsl_error_handler = nullptr;
   LOG(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__);
 
 // forward defines so blinking the error LED will work
-void GSL_PIN_Toggle(PinEnum pin);
+inline void GSL_PIN_Toggle(PinEnum pin);
 void GSL_PIN_SetLow(PinEnum pin);
 void GSL_PIN_Initialize(
     PinEnum pin,
@@ -61,7 +61,7 @@ const char * GSL_BaseFilename (const char  * filename) {
     GSL_PIN_Initialize(GSL_LED_ERROR_PIN, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL, GPIO_SPEED_LOW); \
     GSL_PIN_SetLow(GSL_LED_ERROR_PIN); \
     while (1) { \
-      for (uint8_t i = 0; i < 6; ++i) { \
+      for (uint8_t led_blink_cycle = 0; led_blink_cycle < 6; ++led_blink_cycle) { \
         GSL_DEL_MS(100); \
         GSL_PIN_Toggle(GSL_LED_ERROR_PIN); \
       } \
@@ -86,16 +86,16 @@ const char * GSL_BaseFilename (const char  * filename) {
 // run the following statements the first X times it is encountered
 #define LIMITED_RUN(times) \
     static uint16_t run_count = 0; \
-    if (run_count <= times) { \
+    if (run_count <= (times)) { \
       ++run_count; \
     } \
-    if (run_count <= times)
+    if (run_count <= (times)
 
 // output a message the first X times it is encountered
 #define LIMITED_LOG(times, ...) \
 { \
   static uint16_t output_count = 0; \
-  if (output_count < times) { \
+  if (output_count < (times)) { \
     LOG(__VA_ARGS__); \
     ++output_count; \
   } \
@@ -221,7 +221,7 @@ const char * GSL_BaseFilename (const char  * filename) {
     LOG_LOCATION; \
     LOG("\n\nExecution has been halted."); \
     BLINK_ERROR; \
-  };
+  }
 
 // run a function that return a HAL_StatusTypeDef and error out if it doesn't
 // return HAL_OK
