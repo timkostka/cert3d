@@ -17,7 +17,7 @@ GSL_ERROR_HandlerFunction gsl_error_handler = nullptr;
   LOG(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__);
 
 // forward defines so blinking the error LED will work
-inline void GSL_PIN_Toggle(PinEnum pin);
+void GSL_PIN_Toggle(PinEnum pin);
 void GSL_PIN_SetLow(PinEnum pin);
 void GSL_PIN_Initialize(
     PinEnum pin,
@@ -132,89 +132,28 @@ const char * GSL_BaseFilename (const char  * filename) {
   LOG("\nIt took ", GSL_DEL_ElapsedUS(start_tick), " us."); \
 }
 
-// assert two values are equal with some information if the assert fails
-#define ASSERT_EQ(one, two) { \
+// generic assert comparison operator
+#define ASSERT_GEN(one, two, type, infix) { \
     auto one_value = one; \
     auto two_value = two; \
     if (!(one_value == two_value)) { \
-      LOG("\n\nASSERT_EQ FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") == "); \
+      LOG("\n\nASSERT_" type " FAILED:"); \
+      LOG("\n\nStatement: ", #one, " (", one_value, ") " infix " "); \
       LOG(#two, " (", two_value, ")"); \
       LOG_LOCATION; \
       LOG("\n\nExecution has been halted."); \
       BLINK_ERROR; \
     } \
-  }
+  } \
+((void) 0)
 
-// assert two values are not equal with some information if the assert fails
-#define ASSERT_NE(one, two) { \
-    auto one_value = one; \
-    auto two_value = two; \
-    if (!(one_value != two_value)) { \
-      LOG("\n\nASSERT_NE FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") != "); \
-      LOG(#two, " (", two_value, ")"); \
-      LOG_LOCATION; \
-      LOG("\n\nExecution has been halted."); \
-      BLINK_ERROR; \
-    } \
-  }
-
-// assert two values are equal with some information if the assert fails
-#define ASSERT_GT(one, two) { \
-    auto one_value = one; \
-    auto two_value = two; \
-    if (!(one_value > two_value)) { \
-      LOG("\n\nASSERT_GT FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") > "); \
-      LOG(#two, " (", two_value, ")"); \
-      LOG_LOCATION; \
-      LOG("\n\nExecution has been halted."); \
-      BLINK_ERROR; \
-    } \
-  }
-
-// assert two values are equal with some information if the assert fails
-#define ASSERT_GE(one, two) { \
-    auto one_value = one; \
-    auto two_value = two; \
-    if (!(one_value >= two_value)) { \
-      LOG("\n\nASSERT_GT FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") >= "); \
-      LOG(#two, " (", two_value, ")"); \
-      LOG_LOCATION; \
-      LOG("\n\nExecution has been halted."); \
-      BLINK_ERROR; \
-    } \
-  }
-
-// assert two values are equal with some information if the assert fails
-#define ASSERT_LT(one, two) { \
-    auto one_value = one; \
-    auto two_value = two; \
-    if (!(one_value < two_value)) { \
-      LOG("\n\nASSERT_LT FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") < "); \
-      LOG(#two, " (", two_value, ")"); \
-      LOG_LOCATION; \
-      LOG("\n\nExecution has been halted."); \
-      BLINK_ERROR; \
-    } \
-  }
-
-// assert two values are equal with some information if the assert fails
-#define ASSERT_LE(one, two) { \
-    auto one_value = one; \
-    auto two_value = two; \
-    if (!(one_value <= two_value)) { \
-      LOG("\n\nASSERT_LT FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") <= "); \
-      LOG(#two, " (", two_value, ")"); \
-      LOG_LOCATION; \
-      LOG("\n\nExecution has been halted."); \
-      BLINK_ERROR; \
-    } \
-  }
+// assert order between two values
+#define ASSERT_EQ(one, two) ASSERT_GEN(one, two, "EQ", "==")
+#define ASSERT_NE(one, two) ASSERT_GEN(one, two, "NE", "!=")
+#define ASSERT_GT(one, two) ASSERT_GEN(one, two, "GT", ">")
+#define ASSERT_GE(one, two) ASSERT_GEN(one, two, "GE", ">=")
+#define ASSERT_LT(one, two) ASSERT_GEN(one, two, "LT", "<")
+#define ASSERT_LE(one, two) ASSERT_GEN(one, two, "LE", "<=")
 
 // assert a statement is true, else halt
 #define ASSERT(...) if (!(__VA_ARGS__)) { \
@@ -223,7 +162,8 @@ const char * GSL_BaseFilename (const char  * filename) {
     LOG_LOCATION; \
     LOG("\n\nExecution has been halted."); \
     BLINK_ERROR; \
-  }
+  } \
+((void) 0)
 
 // run a function that return a HAL_StatusTypeDef and error out if it doesn't
 // return HAL_OK

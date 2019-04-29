@@ -40,14 +40,6 @@ void C3D_ProcessBuffers(void) {
     return;
   }
 
-  // add random data
-  // DEBUG
-  /*for (uint16_t i = 0; i < 52; ++i) {
-    uint32_t sync = 0xDEADBEEF;
-    c3d_usb_buffer.StageData(&sync, 4);
-    ++byte_count;
-  }*/
-
   // add sync every 8th frame
   if (c3d_process_count % 8 == 0) {
     uint8_t sync = 0x77;
@@ -64,7 +56,7 @@ void C3D_ProcessBuffers(void) {
     // alias DMA buffer monitor for this channel
     auto & monitor = c3d_signal_dma_monitor[s];
     if (!monitor.IsEmpty()) {
-      channel_mask |= (1 << s);
+      channel_mask |= (1U << s);
     }
   }
 
@@ -75,7 +67,7 @@ void C3D_ProcessBuffers(void) {
   // process signals and move them into the staging buffer
   for (uint16_t s = 0; s < c3d_signal_count; ++s) {
     // if this isn't in the mask, don't output anything
-    if ((channel_mask & (1 << s)) == 0) {
+    if ((channel_mask & (1U << s)) == 0) {
       continue;
     }
     // alias DMA buffer monitor for this channel
@@ -279,7 +271,7 @@ void C3D_SendInfoPacket(void) {
   }
   // construct info packet
   c3d_usb_buffer.StageData("InfoStart", 9);
-  uint32_t clock = (uint32_t) HAL_RCC_GetSysClockFreq();
+  auto clock = (uint32_t) HAL_RCC_GetSysClockFreq();
   c3d_usb_buffer.StageVariable(clock);
   c3d_usb_buffer.StageVariable((uint8_t) c3d_signal_count);
   c3d_usb_buffer.StageVariable((uint8_t) c3d_adc_channel_count);
