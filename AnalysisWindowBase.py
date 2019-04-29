@@ -43,7 +43,7 @@ class AnalysisWindowBase ( wx.Frame ):
         bSizer5 = wx.BoxSizer( wx.HORIZONTAL )
 
         self.notebook = wx.Notebook( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.NB_TOP )
-        self.notebook.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_WINDOW ) )
+        self.notebook.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNTEXT ) )
         self.notebook.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNFACE ) )
 
         self.panel_viewer = wx.Panel( self.notebook, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
@@ -65,7 +65,7 @@ class AnalysisWindowBase ( wx.Frame ):
         bSizer7 = wx.BoxSizer( wx.HORIZONTAL )
 
         self.m_panel3 = wx.Panel( self.panel_test_runner, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
-        self.m_panel3.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNFACE ) )
+        self.m_panel3.SetForegroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_BTNTEXT ) )
 
         bSizer9 = wx.BoxSizer( wx.VERTICAL )
 
