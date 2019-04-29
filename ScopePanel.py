@@ -139,7 +139,6 @@ class ScopePanel(wx.ScrolledWindow):
         screen_size = asize(1920)
         # create popup menu for signal style
         self.style_popup_menu = self.create_style_menu()
-        # create the context popup handler
         self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
         # list of channels
         self.channels = []

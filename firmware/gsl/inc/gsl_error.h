@@ -72,7 +72,8 @@ const char * GSL_BaseFilename (const char  * filename) {
       } \
       /*asm volatile ("bkpt 0");*/ \
     }; \
-  }
+  } \
+  ((void) 0)
 #else
 #define BLINK_ERROR \
   GSL_DEL_MS(200); \
@@ -80,7 +81,7 @@ const char * GSL_BaseFilename (const char  * filename) {
     gsl_error_handler(); \
   } \
   asm volatile ("bkpt 0"); \
-  while (1);
+  while (1)
 #endif
 
 // run the following statements the first X times it is encountered
@@ -99,7 +100,8 @@ const char * GSL_BaseFilename (const char  * filename) {
     LOG(__VA_ARGS__); \
     ++output_count; \
   } \
-}
+} \
+((void) 0)
 
 // output a message the first time it is encountered
 #define LOG_ONCE(...) LIMITED_LOG(1, ##__VA_ARGS__)

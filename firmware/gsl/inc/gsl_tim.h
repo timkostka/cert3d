@@ -957,7 +957,7 @@ void GSL_TIM_FutureCallback(TIM_TypeDef * TIMx,
 void GSL_TIM_Reserve(TIM_TypeDef * TIMx) {
   auto info = GSL_TIM_GetInfo(TIMx);
   if (info->locked) {
-    HALT("\nTimer TIM", GSL_TIM_GetNumber(TIMx) + 1, " already reserved.")
+    HALT("\nTimer TIM", GSL_TIM_GetNumber(TIMx) + 1, " already reserved.");
   }
   info->locked = true;
 }
@@ -979,7 +979,7 @@ uint16_t GSL_TIM_GetDMACCID(uint32_t channel) {
   } else if (channel == TIM_CHANNEL_4) {
     return TIM_DMA_ID_CC4;
   }
-  HALT("Unexpected value")
+  HALT("Unexpected value");
 }
 
 // output a timer register
