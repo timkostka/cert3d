@@ -38,12 +38,21 @@ struct C3D_DMA_Monitor {
     return available;
   }
 
+  // ignore this many values
+  void IgnoreMany(uint16_t count) {
+    ASSERT_LE(count, GetAvailable());
+    if (last_NDTR <= count) {
+      last_NDTR += buffer_capacity;
+    }
+    last_NDTR -= count;
+    ASSERT_GT(last_NDTR, 0);
+    ASSERT_LE(last_NDTR, buffer_capacity);
+  }
+
   // pop as many values as possible within a contiguous region
   // Note: Because the buffer is circular, two calls to this
   // may be necessary to get all data.
   void PopMany(uint8_t * & buffer_out, uint16_t & length) {
-    T * buffer_end = buffer;
-    buffer_end += buffer_capacity;
     // next index
     uint16_t start_index = buffer_capacity - last_NDTR;
     uint16_t next_index = buffer_capacity - dma_stream->NDTR;

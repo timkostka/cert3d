@@ -57,7 +57,7 @@ void C3D_ProcessBuffers(void) {
   uint8_t channel_mask = 0;
   for (uint16_t s = 0; s < c3d_signal_count; ++s) {
     // alias DMA buffer monitor for this channel
-    auto & monitor = c3d_signal_dma_monitor[s];
+    auto & monitor = c3d_signal_usb_dma_monitor[s];
     if (!monitor.IsEmpty()) {
       channel_mask |= (1U << s);
     }
@@ -73,8 +73,8 @@ void C3D_ProcessBuffers(void) {
     if ((channel_mask & (1U << s)) == 0) {
       continue;
     }
-    // alias DMA buffer monitor for this channel
-    auto & monitor = c3d_signal_dma_monitor[s];
+    // alias the DMA buffer monitor for this channel
+    auto & monitor = c3d_signal_usb_dma_monitor[s];
     // read out all available data
     uint8_t * buffer_1 = nullptr;
     uint16_t byte_count_1 = 0;
@@ -194,7 +194,7 @@ void C3D_StartStreaming(void) {
     }
   }
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-    auto & monitor = c3d_signal_dma_monitor[i];
+    auto & monitor = c3d_signal_usb_dma_monitor[i];
     while (monitor.GetAvailable()) {
       monitor.Pop();
     }
@@ -438,6 +438,161 @@ void C3D_ProcessCommands(uint8_t * buffer, uint16_t length) {
 }
 }
 
+// send out USB packet if we can
+void C3D_SendUSBPacket(void) {
+  // if USB is still active, just return
+  auto hcdc = (USBD_CDC_HandleTypeDef*) hUsbDeviceHS.pClassData;
+  if (hcdc->TxState != 0) {
+    return;
+  }
+  // if a chunk is frozen, thaw it
+  if (c3d_usb_buffer.frozen) {
+    LOG_ONCE("\nThawing first chunk");
+    c3d_usb_buffer.Thaw();
+  }
+  // if first chunk is no longer active, send it out
+  if (c3d_usb_buffer.first_chunk != c3d_usb_buffer.active_chunk) {
+    LOG_ONCE("\nSending first chunk");
+    c3d_usb_buffer.Freeze();
+    if (!c3d_ignore_usb_output) {
+      auto result = CDC_Transmit_HS(
+          c3d_usb_buffer.chunk[c3d_usb_buffer.first_chunk],
+          c3d_usb_buffer.chunk_length[c3d_usb_buffer.first_chunk]);
+      ASSERT_EQ(result, USBD_OK);
+    }
+  }
+}
+
+// update endstops based on current position
+void C3D_UpdateEndstops(void) {
+  for (uint16_t i = 0; i < c3d_motor_count; ++i) {
+    // motor alias
+    auto & motor = c3d_motor[i];
+    // skip stops which have no range
+    if (motor.range_mm == -1.0f) {
+      continue;
+    }
+    // get position
+    float mm = motor.GetPositionMM();
+    // update low stop
+    if (mm <= 0.0f) {
+      motor.low_stop.On();
+    } else {
+      motor.low_stop.Off();
+    }
+    // update high stop
+    if (mm >= motor.range_mm) {
+      motor.high_stop.On();
+    } else {
+      motor.high_stop.Off();
+    }
+  }
+}
+
+// update motor positions
+// this must be called with a frequency
+void C3D_UpdateMotorPositions(void) {
+  // Note: Because these are populated via DMA, and because we have various
+  // interrupts, it is possible for a new STEP edge to be added between
+  // reads.  The algorithm ensures that each STEP edge is processed first.
+  for (uint16_t i = 0; i < c3d_motor_count; ++i) {
+    // motor alias
+    auto & motor = c3d_motor[i];
+    // monitor for motor STEP signal
+    auto & step_monitor = c3d_signal_step_dma_monitor[2 * i];
+    // monitor for motor DIR signal
+    auto & dir_monitor = c3d_signal_step_dma_monitor[2 * i + 1];
+
+    // get number of steps available on each signal
+    uint16_t pre_dir_edge_count = dir_monitor.GetAvailable();
+    uint16_t step_edge_count = step_monitor.GetAvailable();
+    uint16_t dir_edge_count = dir_monitor.GetAvailable();
+    ASSERT_GE(dir_edge_count, pre_dir_edge_count);
+    // if no steps, just process DIR edges
+    if (step_edge_count == 0 && pre_dir_edge_count == dir_edge_count) {
+      dir_monitor.IgnoreMany(dir_edge_count);
+      if (dir_edge_count % 2 == 1) {
+        motor.dir_is_high = !motor.dir_is_high;
+      }
+      continue;
+    }
+    // if only steps, just process STEP edges
+    if (dir_edge_count == 0) {
+      // count number of steps to take
+      uint16_t step_count = step_edge_count / 2;
+      if (!motor.step_is_high && (step_edge_count % 2) == 1) {
+        ++step_count;
+      }
+      // advance the motor position
+      if (motor.dir_is_high) {
+        motor.step_position += step_count;
+      } else {
+        motor.step_position -= step_count;
+      }
+      // flip signal if necessary
+      if (step_edge_count % 2 == 1) {
+        motor.step_is_high = !motor.step_is_high;
+      }
+      continue;
+    }
+    // else we have edges on both DIR and STEP, so we need to step through
+    // them and process one at a time.  We do this by assuming each edge is
+    // within half of the counter overflow of each other.
+    // process all STEP edges
+    while (step_edge_count && dir_edge_count) {
+      // read the ticks at next DIR edge
+      int32_t dir_edge = dir_monitor.Peek();
+      while (true) {
+        bool step_before_edge;
+        // read ticks at next STEP edge
+        int32_t step_edge = step_monitor.Peek();
+        if (dir_edge < motor.half_counter_overflow) {
+          step_before_edge =
+              (step_edge <= dir_edge)
+              || (step_edge > dir_edge + motor.half_counter_overflow);
+        } else {
+          step_before_edge =
+              (dir_edge - motor.half_counter_overflow < step_edge)
+              && (step_edge <= dir_edge);
+        }
+        // if edge comes first, advance the DIR signal
+        if (!step_before_edge) {
+          break;
+        }
+        // else process the step edge
+        step_monitor.Pop();
+        --step_edge_count;
+        // only advance on a rising edge of STEP
+        if (!motor.step_is_high) {
+          if (motor.dir_is_high) {
+            ++motor.step_position;
+          } else {
+            --motor.step_position;
+          }
+        }
+        motor.step_is_high = !motor.step_is_high;
+      }
+      // process DIR edge
+      dir_monitor.Pop();
+      --dir_edge_count;
+      motor.dir_is_high = !motor.dir_is_high;
+    }
+    // process remaining STEP edges
+    if (dir_edge_count == 0) {
+    }
+    // all STEP edges should be processed by now
+    ASSERT_EQ(step_edge_count, 0);
+    // process remaining DIR edges
+    // we can only process DIR edges if no new STEP edges got added
+    if (pre_dir_edge_count == dir_edge_count) {
+      if (dir_edge_count % 2 == 1) {
+        motor.dir_is_high = !motor.dir_is_high;
+      }
+      dir_monitor.IgnoreMany(dir_edge_count);
+    }
+  }
+}
+
 // main entry point for the C3D program
 void C3D_Main(void) {
 
@@ -486,10 +641,20 @@ void C3D_Main(void) {
         GSL_BUF_Create(c3d_signal[i].buffer_capacity * sizeof(uint16_t));
   }
 
-  // initialize signal DMA monitors
+  // initialize signal usb DMA monitors
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     auto & signal = c3d_signal[i];
-    auto & monitor = c3d_signal_dma_monitor[i];
+    auto & monitor = c3d_signal_usb_dma_monitor[i];
+    monitor.buffer_capacity = signal.buffer_capacity;
+    monitor.buffer = signal.buffer;
+    monitor.dma_stream = signal.dma_stream;
+    monitor.last_NDTR = monitor.buffer_capacity;
+  }
+
+  // initialize signal step DMA monitors
+  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
+    auto & signal = c3d_signal[i];
+    auto & monitor = c3d_signal_step_dma_monitor[i];
     monitor.buffer_capacity = signal.buffer_capacity;
     monitor.buffer = signal.buffer;
     monitor.dma_stream = signal.dma_stream;
@@ -502,7 +667,8 @@ void C3D_Main(void) {
     monitor.buffer_capacity = c3d_adc_buffer_capacity;
     monitor.buffer = c3d_adc_buffer;
     monitor.last_NDTR = monitor.buffer_capacity;
-    monitor.dma_stream = GSL_ADC_GetInfo(c3d_adc)->handle->DMA_Handle->Instance;
+    monitor.dma_stream =
+        GSL_ADC_GetInfo(c3d_adc)->handle->DMA_Handle->Instance;
   }
 
   // initialize timer pins
@@ -680,75 +846,21 @@ void C3D_Main(void) {
 
   // now just output stuff
   while (true) {
+
     // enable streaming if requested
     if (c3d_start_streaming_flag) {
       C3D_StartStreaming();
     }
 
-    //static bool send_data = true;
-    // DEBUG
-    if (GSL_DEL_ElapsedS(0) > 1.0f) {
-      static bool done = false;
-      if (!done) {
-        if (!c3d_output_to_usb) {
-          C3D_StartStreaming();
-          GSL_DEL_MS(3);
-          for (uint16_t i = 0; i < 64; ++i) {
-            GSL_UART_SendString(UART4, "Hello world!");
-            GSL_DEL_MS((i % 8) + 1);
-          }
-          LOG("\nUART4 speed is ", GSL_UART_GetClock(UART4));
-          GSL_DEL_MS(3);
-          C3D_StopStreaming();
-        }
-        done = true;
-      }
-    }
+    // queue new USB packet
+    C3D_SendUSBPacket();
 
-    // DEBUG
-    if (c3d_debug_flag) {
-      //send_data = false;
-      LOG_ONCE("\nSending debug stream");
-      GSL_UART_SendString(UART4, "Hello world!");
-      c3d_debug_flag = false;
-      for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-        if (i == 0) {
-          LOG("\n");
-        } else {
-          LOG(", ");
-        }
-        LOG("CH", i, "=", c3d_signal[i].dma_stream->NDTR);
-      }
-    }
+    // process steps to determine motor positions
+    C3D_UpdateMotorPositions();
 
-    // if USB is still active, continue main loop
-    {
-      auto hcdc =
-          (USBD_CDC_HandleTypeDef*) hUsbDeviceHS.pClassData;
-      if (hcdc->TxState != 0) {
-        continue;
-      }
-    }
+    // process endstops
+    C3D_UpdateEndstops();
 
-    // if a chunk is frozen, thaw it
-    if (c3d_usb_buffer.frozen) {
-      LOG_ONCE("\nThawing first chunk");
-      c3d_usb_buffer.Thaw();
-    }
-
-    // if first chunk is no longer active, send it out
-    if (c3d_usb_buffer.first_chunk != c3d_usb_buffer.active_chunk) {
-      LOG_ONCE("\nSending first chunk");
-      c3d_usb_buffer.Freeze();
-      if (!c3d_ignore_usb_output) {
-        auto result = CDC_Transmit_HS(
-            c3d_usb_buffer.chunk[c3d_usb_buffer.first_chunk],
-            c3d_usb_buffer.chunk_length[c3d_usb_buffer.first_chunk]);
-        ASSERT_EQ(result, USBD_OK);
-      }
-    }
   }
-
-  while (true);
 
 }

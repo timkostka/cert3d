@@ -88,7 +88,10 @@ TIM_TypeDef * const c3d_master_timer = TIM4;
 const uint16_t c3d_signal_count = sizeof(c3d_signal) / sizeof(*c3d_signal);
 
 // monitor for each signal DMA channel
-C3D_DMA_Monitor<uint16_t> c3d_signal_dma_monitor[c3d_signal_count];
+C3D_DMA_Monitor<uint16_t> c3d_signal_usb_dma_monitor[c3d_signal_count];
+
+// step monitor for each signal DMA channel
+C3D_DMA_Monitor<uint16_t> c3d_signal_step_dma_monitor[c3d_signal_count];
 
 // monitor for the ADC DMA channel
 C3D_DMA_Monitor<uint16_t> c3d_adc_dma_monitor;
@@ -107,12 +110,6 @@ C3D_ChunkBuffer c3d_usb_buffer;
 
 // if true, stream data to USB
 bool c3d_output_to_usb = false;
-
-// create end stops
-EndStopStruct c3d_end_stop[] = {};
-
-// number of end stops
-uint16_t c3d_end_stop_count = sizeof(c3d_end_stop) / sizeof(*c3d_end_stop);
 
 // commands
 struct CommandStruct {
@@ -148,3 +145,49 @@ bool c3d_ignore_usb_output = false;
 
 // trigger to start streaming
 bool c3d_start_streaming_flag = false;
+
+// number of axes
+const uint16_t c3d_motor_count = c3d_signal_count / 2;
+static_assert(c3d_signal_count % 2 == 0, "");
+
+// stepper motor information
+struct C3D_StepperMotorStruct {
+  // steps per mm
+  float steps_per_mm;
+  // range in mm (or -1 if unlimited)
+  float range_mm;
+  // absolute position in steps
+  int32_t step_position;
+  // true if DIR signal is high
+  bool dir_is_high;
+  // true if STEP signal is high
+  bool step_is_high;
+  // half of the counter overflow value
+  uint16_t half_counter_overflow;
+  // mm range
+  // steps at zero position
+  int32_t zero_step_offset;
+  // low endstop
+  C3D_EndStopStruct low_stop;
+  // high endstop
+  C3D_EndStopStruct high_stop;
+  // return absolute position in mm
+  float GetPositionMM() const {
+    return (step_position - zero_step_offset) / steps_per_mm;
+  }
+};
+
+C3D_StepperMotorStruct c3d_motor[c3d_motor_count] = {
+    {80.0f, 230.0f, 0, false, false, 32768, -1000, {kPinB7}, {kPinB6}},
+    {80.0f, 230.0f, 0, false, false, 32768, -1000, {kPinB3}, {kPinD2}},
+    {400.0f, 200.0f, 0, false, false, 32768 / 2, -1000, {kPinC12}, {kPinC11}},
+    {93.0f, -1.0f, 0, false, false, 32768, -1000, {kPinC10}, {kPinA15}},
+};
+
+// printer geometry
+struct C3D_PrinterGeometryStruct {
+  // current absolute step position
+  int32_t step_position[c3d_motor_count];
+  // steps per mm
+  float steps_per_mm[c3d_motor_count];
+} c3d_geometry;
