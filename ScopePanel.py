@@ -251,8 +251,6 @@ class ScopePanel(wx.ScrolledWindow):
 
         self.adjust_channel_name_size()
 
-        # self.zoom_to_all()
-
         # DEBUG populate sample data
         self.populate_example_data()
 
@@ -357,26 +355,6 @@ class ScopePanel(wx.ScrolledWindow):
                 max_length = max(max_length, rect[0])
         if max_length > 0:
             self.channel_length = max_length + asize(5)
-
-    def create_stipple_bitmap(self, color):
-        """Return the stipple bitmap for the given color."""
-        rgb = color.GetRGB()
-        # if we already created and cached this one, just return it
-        if rgb in self.stipple_brushes:
-            return self.stipple_brushes[rgb]
-        # create a new bitmap stipple mask
-        image = wx.Image(32, 32, clear=True)
-        image.InitAlpha()
-        for x in range(image.GetWidth()):
-            for y in range(image.GetHeight()):
-                if (2 * x + y) % 16 < 8:
-                    image.SetAlpha(x, y, wx.ALPHA_TRANSPARENT)
-                else:
-                    rgb = (color.Red(), color.Green(), color.Blue())
-                    image.SetRGB(x, y, *rgb)
-        bmp = wx.Bitmap(image)
-        self.stipple_brushes[rgb] = bmp
-        return bmp
 
     def create_style_menu(self):
         """Create and return a wx.Menu for the signal style popup."""
@@ -677,7 +655,7 @@ class ScopePanel(wx.ScrolledWindow):
                         break
                 assert signal.active_data is not None
 
-    def zoom_to_all(self):
+    def zoom_to_all(self, include_zero=True):
         """Initialize the viewing window to see all data."""
         if not self.channels:
             return
@@ -719,7 +697,11 @@ class ScopePanel(wx.ScrolledWindow):
                     high_values.append(max(x[2] for x in data.points))
             if low_values:
                 channel.low_value = min(low_values)
+                if include_zero:
+                    channel.low_value = min(0.0, channel.low_value)
                 channel.high_value = max(high_values)
+                if include_zero:
+                    channel.high_value = max(0.0, channel.high_value)
                 if channel.low_value == channel.high_value:
                     channel.high_value = channel.low_value + 1e99
 
@@ -735,7 +717,7 @@ class ScopePanel(wx.ScrolledWindow):
                     data.optimize()
                 if data.get_point_count() < 2:
                     continue
-                if isinstance(data, PlotData):
+                if isinstance(data, PlotData) or isinstance(data, FuzzyPlotData):
                     continue
                     if data.points[0][1] == data.points[1][1]:
                         first_activity.append(data.get_time_at_index(1))
@@ -822,54 +804,6 @@ class ScopePanel(wx.ScrolledWindow):
             return "%.0f ms" % (time_s * 1e3)
         else:
             return "%g s" % time_s
-
-    def draw_plotdata_channel(self, dc, rect, channel, signal):
-        """
-        Draw a channel of type PlotData to the given rectangular region.
-
-        bottom_value is the y value of a point on the bottom of the rect.
-        top_value is the y value of a point on the top of the rect.
-
-        """
-        # alias the data
-        data = signal.data
-        # clip to the specified region
-        dc.SetClippingRegion(*rect)
-        # get pixels per tick (x scaling)
-        pixels_per_tick = data.seconds_per_tick / self.seconds_per_pixel
-        # x pixel of start of channel data
-        channel_left = (
-            rect[0]
-            + (data.start_time - self.start_time) / self.seconds_per_pixel
-        )
-        # alias some things to shorter names
-        bottom_value = channel.low_value
-        top_value = channel.high_value
-        y1 = rect[1]
-        y2 = y1 + rect[3] - 1
-        left = rect[0]
-        right = rect[0] + rect[2] - 1
-        # get pixels per value (y scaling)
-        pixels_per_value = (y2 - y1 - 2 * (signal.thickness // 2)) / (
-            bottom_value - top_value
-        )
-        top_value -= (signal.thickness // 2) / pixels_per_value
-        # set the drawing pen
-        dc.SetPen(wx.Pen(signal.color, signal.thickness))
-        x2 = None
-        y2 = None
-        for point in data.data[1:]:
-            x1, y1 = x2, y2
-            x2 = int(channel_left + point[0] * pixels_per_tick + 0.5)
-            y2 = int(rect[1] + (point[1] - top_value) * pixels_per_value + 0.5)
-            # exit if we're drawing offscreen
-            if x1 is None:
-                continue
-            if x1 > right:
-                break
-            if x2 >= left:
-                dc.DrawLine(x1, y1, x2, y2)
-        dc.DestroyClippingRegion()
 
     def find_dt(self):
         """Evaluate the best time delta for the given scale."""
@@ -995,15 +929,6 @@ class ScopePanel(wx.ScrolledWindow):
                     channel.low_value,
                     channel.high_value,
                 )
-                continue
-                if isinstance(signal.data, BilevelData):
-                    self.draw_bileveldata_channel(dc, rect, channel, signal)
-                elif isinstance(signal.data, PlotData):
-                    self.draw_plotdata_channel(dc, rect, channel, signal)
-                elif isinstance(signal.data, TriStateData):
-                    self.draw_tristatedata_channel(dc, rect, channel, signal)
-                else:
-                    print("ERROR: unknown data type")
             top += channel.height
         timings.append(time.perf_counter())
         # output timing information

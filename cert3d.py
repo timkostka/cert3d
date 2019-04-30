@@ -430,8 +430,12 @@ class AnalysisWindow(AnalysisWindowBase):
         # replace signal data with data from file
         self.scope_panel.clear()
         for index, this_data in enumerate(data):
+            if index < len(signal_names):
+                name = signal_names[index]
+            else:
+                name = this_data.name
             channel = ScopeChannel(
-                signal=Signal(name=signal_names[index], data=this_data)
+                signal=Signal(name=name, data=this_data)
             )
             self.scope_panel.add_channel(channel)
         # create step channels if possible
@@ -463,17 +467,17 @@ class AnalysisWindow(AnalysisWindowBase):
         try:
             port = self.c3d_port_thread.serial_port.port
             rate = "%.3f Mbps" % self.c3d_port_thread.get_data_rate_mbps()
-            c3d_status = 'C3D on %s (%s)' % (port, rate)
+            c3d_status = "C3D on %s (%s)" % (port, rate)
         except AttributeError:
             # this is triggered when the serial port is closed
             pass
         # update status bar
         self.status_bar.SetStatusText(c3d_status, 2)
-        #if port_name != self.static_text_c3d_board_status.GetLabel():
+        # if port_name != self.static_text_c3d_board_status.GetLabel():
         #    self.static_text_c3d_board_status.SetLabel(port_name)
-        #if data_rate != self.static_text_c3d_board_data_rate.GetLabel():
+        # if data_rate != self.static_text_c3d_board_data_rate.GetLabel():
         #    self.static_text_c3d_board_data_rate.SetLabel(data_rate)
-        #if data_size != self.static_text_c3d_board_data_size.GetLabel():
+        # if data_size != self.static_text_c3d_board_data_size.GetLabel():
         #    self.static_text_c3d_board_data_size.SetLabel(data_size)
         # update Printer port
         # noinspection PyUnusedLocal
@@ -485,7 +489,7 @@ class AnalysisWindow(AnalysisWindowBase):
             # this is triggered when the serial port is closed
             pass
         self.status_bar.SetStatusText(printer_status, 1)
-        #if port_name != self.static_text_printer_board_connection.GetLabel():
+        # if port_name != self.static_text_printer_board_connection.GetLabel():
         #    self.static_text_printer_board_connection.SetLabel(port_name)
         # if we just finished a test, open it
         if (
@@ -782,8 +786,10 @@ class Packet:
         self.channel_edges = channel_edges
         # read adc values
         adc_count = struct.unpack("B", file.read(1))[0]
-        # print(adc_count)
-        assert adc_count == 0
+        adc_values = []
+        for _ in range(adc_count):
+            adc_values.append(struct.unpack("%dH" % 14, file.read(2 * 14)))
+        self.adc_values = adc_values
 
 
 def packets_to_signals(packets, header: InfoHeader):
@@ -855,9 +861,13 @@ def packets_to_signals(packets, header: InfoHeader):
                 edges[channel_index][i] += overflow
         # add data to finish signals
         edges[channel_index].append(len(packets) * ticks_per_packet)
-    # DEBUG
+    # now unpack adc values
+    adc_values = []
+    for packet in packets:
+        adc_values.extend(packet.adc_values)
     print("- Done!")
     print("- Edges in each channel:", [len(x) - 2 for x in edges])
+    print("- ADC readings:", len(adc_values))
     # print([x[:10] for x in edges])
     #    print("Edges in each channel:", [len(x) - 2 for x in edges])
     # process each signal into a BilevelData object
@@ -866,11 +876,28 @@ def packets_to_signals(packets, header: InfoHeader):
         data = BilevelData()
         data.start_time = 0.0
         data.start_high = False
+        data.seconds_per_tick = 1.0 / header.signal_frequencies[i]
         if edges[i][:2] == [0, 0]:
             del edges[i][0]
             data.start_high = True
         data.edges = edges[i]
         signals.append(data)
+    if adc_values:
+        # transpose lists
+        adc_values = list(map(list, zip(*adc_values)))
+        for c, values in enumerate(adc_values):
+            low, high = header.adc_ranges[c]
+            data = PlotData()
+            data.start_time = 0.0
+            data.name = "ADC%d" % (c + 1)
+            data.seconds_per_tick = (
+                header.ticks_per_adc_reading / header.system_clock
+            )
+            data.points = [
+                (i, low + y * (high - low) / 4095.0)
+                for i, y in enumerate(values)
+            ]
+            signals.append(data)
     return signals
 
 
@@ -950,6 +977,7 @@ def postprocess_signals(scope_panel: ScopePanel):
         "Y": wx.CYAN,
         "Z": wx.Colour(255, 0, 255),
         "E": wx.WHITE,
+        "A": wx.RED,
     }
     name_to_index = {
         scope_panel.channels[i].signals[0].name: i
@@ -969,7 +997,7 @@ def postprocess_signals(scope_panel: ScopePanel):
     indices_to_delete = [
         y
         for x, y in name_to_index.items()
-        if x[0] != "X" and y >= 8 and x != "E_VEL"
+        if x[0] != "X" and y >= 8 and x != "E_VEL" and x[:3] != 'ADC'
     ]
     # delete channels
     indices_to_delete.sort(reverse=True)
@@ -1012,9 +1040,6 @@ def interpret_data(filename):
         print("Found %d packets" % len(packets))
     # convert packets to BilevelData
     signals = packets_to_signals(packets, header)
-    # set clock for each signal
-    for i in range(header.signal_count):
-        signals[i].seconds_per_tick = 1.0 / header.signal_frequencies[i]
     return signals
 
 
@@ -1129,6 +1154,7 @@ class C3DPortMonitor:
         # open port if it's not already open
         if not self.serial_port:
             for port in find_c3d_ports():
+                print('Trying to connect to %s' % port.device)
                 try:
                     serial_port = serial.Serial(
                         port=port.device,
