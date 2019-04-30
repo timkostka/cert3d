@@ -917,6 +917,9 @@ void GSL_TIM_LogDescription(void) {
     LOG(", ",
         (uint32_t) (GSL_TIM_GetFrequency(info->handle->Instance) + 0.5f),
         " Hz update");
+    LOG(", ",
+        GSL_TIM_GetTicksPerUpdate(info->handle->Instance),
+        " ticks/update");
   }
 }
 

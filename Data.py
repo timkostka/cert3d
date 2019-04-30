@@ -891,5 +891,4 @@ class FuzzyPlotData(Data):
                     dc.SetPen(gray_pen)
                     dc.DrawLine(x1, low, x1, high)
                     dc.SetPen(solid_pen)
-            # dc.DrawLine(x1, y1, x2, y2)
         dc.DestroyClippingRegion()

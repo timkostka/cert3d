@@ -23,6 +23,10 @@ const uint32_t c3d_adc_channel[] = {
     ADC_CHANNEL_9,
 };
 
+// channel count
+const uint16_t c3d_adc_channel_count =
+    sizeof(c3d_adc_channel) / sizeof(*c3d_adc_channel);
+
 // timer to use to trigger ADC readings
 TIM_TypeDef * const c3d_adc_timer = TIM2;
 
@@ -35,12 +39,8 @@ const float c3d_adc_high_resistor = 7500.0f;
 // low resistor on adc resistor divider
 const float c3d_adc_low_resistor = 1000.0f;
 
-// channel count
-const uint16_t c3d_adc_channel_count =
-    sizeof(c3d_adc_channel) / sizeof(*c3d_adc_channel);
-
 // ADC buffer size
-const uint16_t c3d_adc_buffer_capacity = 1024;
+const uint16_t c3d_adc_buffer_capacity = c3d_adc_channel_count * 4;
 
 // ADC output buffer
 uint16_t c3d_adc_buffer[c3d_adc_buffer_capacity];

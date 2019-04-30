@@ -7,7 +7,7 @@
 #define GSL_LED_ERROR_PIN kPinC15
 #define GSL_LED_STATUS_PIN kPinNone
 
-#define GSL_DELOG_CAPACITY 12192
+#define GSL_DELOG_CAPACITY 4096
 #define GSL_DELOG_PORT USART3
 #define GSL_DELOG_PRIORITY 12
 
@@ -31,7 +31,7 @@
 #define GSL_TIM8_PIN_CH4 kPinC9
 
 // general purpose buffer size
-#define GSL_BUF_CAPACITY 100000
+#define GSL_BUF_CAPACITY 102400
 
 // priority of the second counter interrupt
 #define GSL_SECNT_PRIORITY 15

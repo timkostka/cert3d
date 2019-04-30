@@ -22,13 +22,14 @@ struct GSL_TIM_PinsStruct {
   PinEnum ch3n;
 };
 
-// triggers
+// timer trigger mapping
 struct GSL_TIM_TriggerStruct {
   TIM_TypeDef * target;
   TIM_TypeDef * source;
   uint32_t trigger;
 };
 
+// hold trigger mappings between timers
 const GSL_TIM_TriggerStruct gsl_tim_trigger[] = {
     {TIM1, TIM5, TIM_TS_ITR0},
     {TIM1, TIM2, TIM_TS_ITR1},

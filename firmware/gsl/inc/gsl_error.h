@@ -14,7 +14,7 @@ GSL_ERROR_HandlerFunction gsl_error_handler = nullptr;
 // this will output the current code position to the log
 #define LOG_POSITION \
   LOG("\n", GSL_GEN_GetTimestampSinceReset()); \
-  LOG(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__);
+  LOG(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__)
 
 // forward defines so blinking the error LED will work
 void GSL_PIN_Toggle(PinEnum pin);
@@ -136,9 +136,9 @@ const char * GSL_BaseFilename (const char  * filename) {
 #define ASSERT_GEN(one, two, type, infix) { \
     auto one_value = one; \
     auto two_value = two; \
-    if (!(one_value == two_value)) { \
+    if (!(one_value infix two_value)) { \
       LOG("\n\nASSERT_" type " FAILED:"); \
-      LOG("\n\nStatement: ", #one, " (", one_value, ") " infix " "); \
+      LOG("\n\nStatement: ", #one, " (", one_value, ") " #infix " "); \
       LOG(#two, " (", two_value, ")"); \
       LOG_LOCATION; \
       LOG("\n\nExecution has been halted."); \
@@ -148,12 +148,12 @@ const char * GSL_BaseFilename (const char  * filename) {
 ((void) 0)
 
 // assert order between two values
-#define ASSERT_EQ(one, two) ASSERT_GEN(one, two, "EQ", "==")
-#define ASSERT_NE(one, two) ASSERT_GEN(one, two, "NE", "!=")
-#define ASSERT_GT(one, two) ASSERT_GEN(one, two, "GT", ">")
-#define ASSERT_GE(one, two) ASSERT_GEN(one, two, "GE", ">=")
-#define ASSERT_LT(one, two) ASSERT_GEN(one, two, "LT", "<")
-#define ASSERT_LE(one, two) ASSERT_GEN(one, two, "LE", "<=")
+#define ASSERT_EQ(one, two) ASSERT_GEN(one, two, "EQ", ==)
+#define ASSERT_NE(one, two) ASSERT_GEN(one, two, "NE", !=)
+#define ASSERT_GT(one, two) ASSERT_GEN(one, two, "GT", >)
+#define ASSERT_GE(one, two) ASSERT_GEN(one, two, "GE", >=)
+#define ASSERT_LT(one, two) ASSERT_GEN(one, two, "LT", <)
+#define ASSERT_LE(one, two) ASSERT_GEN(one, two, "LE", <=)
 
 // assert a statement is true, else halt
 #define ASSERT(...) if (!(__VA_ARGS__)) { \
@@ -182,7 +182,8 @@ const char * GSL_BaseFilename (const char  * filename) {
       LOG_LOCATION; \
       LOG("\n\nExecution has been halted."); \
       BLINK_ERROR;} \
-    };
+    } \
+((void) 0)
 
 // these must be defined elsewhere
 void LOG(const char * message);
