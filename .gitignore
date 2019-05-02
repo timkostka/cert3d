@@ -45,6 +45,7 @@ pip-delete-this-directory.txt
 **/.idea/workspace.xml
 **/.idea/usage.statistics.xml
 **/.idea/tasks.xml
+firmware/.idea/runConfigurations
 
 # Unit test / coverage reports
 htmlcov/
