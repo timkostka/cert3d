@@ -14,7 +14,7 @@ struct C3D_DMA_Monitor {
   uint16_t buffer_capacity;
 
   // point to buffer
-  T * buffer;
+  volatile T * buffer;
 
   // previous NDTR value;
   uint32_t last_NDTR;

@@ -542,7 +542,7 @@ void C3D_UpdateMotorPositions(void) {
     while (step_edge_count && dir_edge_count) {
       // read the ticks at next DIR edge
       int32_t dir_edge = dir_monitor.Peek();
-      while (true) {
+      while (step_edge_count) {
         bool step_before_edge;
         // read ticks at next STEP edge
         int32_t step_edge = step_monitor.Peek();
@@ -653,12 +653,12 @@ void C3D_Main(void) {
 
   // initialize signal step DMA monitors
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-    auto & signal = c3d_signal[i];
-    auto & monitor = c3d_signal_step_dma_monitor[i];
-    monitor.buffer_capacity = signal.buffer_capacity;
-    monitor.buffer = signal.buffer;
-    monitor.dma_stream = signal.dma_stream;
-    monitor.last_NDTR = monitor.buffer_capacity;
+    auto & master = c3d_signal_usb_dma_monitor[i];
+    auto & slave = c3d_signal_step_dma_monitor[i];
+    slave.buffer_capacity = master.buffer_capacity;
+    slave.buffer = master.buffer;
+    slave.dma_stream = master.dma_stream;
+    slave.last_NDTR = master.buffer_capacity;
   }
 
   // initialize ADC DMA monitor
@@ -859,7 +859,7 @@ void C3D_Main(void) {
     C3D_UpdateMotorPositions();
 
     // process endstops
-    C3D_UpdateEndstops();
+    //C3D_UpdateEndstops();
 
   }
 

@@ -21,10 +21,10 @@ struct C3D_EndStopStruct {
   }
   // turn on to simulate a triggered end stop
   void Off(void) {
-    GSL_PIN_SetHigh(pin);
+    GSL_PIN_SetValue(pin, normally_high);
   }
   // turn off
   void On(void) {
-    GSL_PIN_SetLow(pin);
+    GSL_PIN_SetValue(pin, !normally_high);
   }
 };

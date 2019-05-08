@@ -884,7 +884,7 @@ class FuzzyPlotData(Data):
             if y2high == y2low:
                 dc.DrawLine(x1, y2low, x2, y2low)
             else:
-                dc.DrawRectangle(x1, y2low, x2 - x1 + 1, y2high - y2low)
+                dc.DrawRectangle(x1, y2low, x2 - x1 + 1, y2high - y2low + 1)
                 low = max(y1low, y2low) + 1
                 high = min(y1high, y2high) - 1
                 if low <= high:

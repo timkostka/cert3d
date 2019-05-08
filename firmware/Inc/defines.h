@@ -31,7 +31,8 @@
 #define GSL_TIM8_PIN_CH4 kPinC9
 
 // general purpose buffer size
-#define GSL_BUF_CAPACITY 102400
+//#define GSL_BUF_CAPACITY 102400
+#define GSL_BUF_CAPACITY 72400
 
 // priority of the second counter interrupt
 #define GSL_SECNT_PRIORITY 15

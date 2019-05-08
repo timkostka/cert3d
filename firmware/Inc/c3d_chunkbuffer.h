@@ -3,7 +3,7 @@
 #include "c3d_includes.h"
 
 // number of chunks
-const uint16_t c3d_chunk_count = 45;
+const uint16_t c3d_chunk_count = 16;
 
 // length of each chunk in bytes
 const uint16_t c3d_chunk_capacity = 2048;

@@ -3,8 +3,8 @@
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
   <component name="CidrRootsConfiguration">
     <sourceRoots>
+      <file path="$PROJECT_DIR$/GSL/inc" />
       <file path="$PROJECT_DIR$/Src" />
-      <file path="$PROJECT_DIR$/gsl/inc" />
     </sourceRoots>
   </component>
   <component name="JavaScriptSettings">
