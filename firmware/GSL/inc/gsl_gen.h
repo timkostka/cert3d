@@ -114,17 +114,17 @@ char * GSL_GEN_GetFirmwareTimestamp(void) {
     // month
     uint8_t month = 0;
     switch (__DATE__ [2]) {
-    case 'n': month = (__DATE__ [1] == 'a' ? 1 : 6); break;
-    case 'b': month = 2; break;
-    case 'r': month = (__DATE__ [0] == 'M' ? 3 : 4); break;
-    case 'y': month = 5; break;
-    case 'l': month = 7; break;
-    case 'g': month = 8; break;
-    case 'p': month = 9; break;
-    case 't': month = 10; break;
-    case 'v': month = 11; break;
-    case 'c': month = 12; break;
-    default: break;
+      case 'n': month = (__DATE__ [1] == 'a' ? 1 : 6); break;
+      case 'b': month = 2; break;
+      case 'r': month = (__DATE__ [0] == 'M' ? 3 : 4); break;
+      case 'y': month = 5; break;
+      case 'l': month = 7; break;
+      case 'g': month = 8; break;
+      case 'p': month = 9; break;
+      case 't': month = 10; break;
+      case 'v': month = 11; break;
+      case 'c': month = 12; break;
+      default: break;
     }
     timestamp[4] = '0' + month / 10;
     timestamp[5] = '0' + month % 10;
@@ -182,27 +182,16 @@ char * GSL_GEN_GetFirmwareTimestampLong(void) {
   return long_timestamp;
 }
 
-// Return the timestamp since reset (using DWT counter)
+// Return the timestamp for the given time
 // Format: "DDD:HH:MM:SS.UUUUUU"
-//
-// (Native uint64_t modulo and division is not supported on the STM32, so we
-// implement something that doesn't require it.  This is preferable to using a
-// library which supports uint64_t division operations.)
-//
-// On my speed tests, this routine took ~221 ticks to run.
-//
-// To be valid, the ticks32 value must be a value taken recently (within the
-// past few seconds)
-char * GSL_GEN_GetTimestampSinceReset(uint32_t ticks = GSL_DEL_Ticks()) {
+char * GSL_GEN_FormTimestamp(GSL_DEL_LongTime time) {
   // buffer to hold result
   static char buffer[20] = "DDD:HH:MM:SS.UUUUUU";
-  // get the long time
-  GSL_DEL_LongTime time = GSL_DEL_GetLongTime(ticks);
   // convert ticks into microseconds, seconds, minutes, hours days
   uint32_t seconds = time.ticks / gsl_del_system_clock;
   uint32_t microseconds =
       (time.ticks % gsl_del_system_clock) /
-      (gsl_del_system_clock / 1e6f) + 0.5f;
+          (gsl_del_system_clock / 1e6f) + 0.5f;
   if (microseconds >= 1000000) {
     microseconds = 999999;
   }
@@ -242,6 +231,24 @@ char * GSL_GEN_GetTimestampSinceReset(uint32_t ticks = GSL_DEL_Ticks()) {
   buffer[1] = '0' + ((days / 10) % 10);
   buffer[0] = '0' + (days / 100);
   return buffer;
+}
+
+
+// Return the timestamp since reset (using DWT counter)
+// Format: "DDD:HH:MM:SS.UUUUUU"
+//
+// (Native uint64_t modulo and division is not supported on the STM32, so we
+// implement something that doesn't require it.  This is preferable to using a
+// library which supports uint64_t division operations.)
+//
+// On my speed tests, this routine took ~221 ticks to run.
+//
+// To be valid, the ticks32 value must be a value taken recently (within the
+// past few seconds)
+char * GSL_GEN_GetTimestampSinceReset(uint32_t ticks = GSL_DEL_Ticks()) {
+  // get the long time
+  GSL_DEL_LongTime time = GSL_DEL_GetLongTime(ticks);
+  return GSL_GEN_FormTimestamp(time);
 }
 
 // convert value to BCD format
@@ -320,31 +327,70 @@ uint32_t * const GSL_GEN_MemoryFlashStart = (uint32_t *)(0x08000000);
 // return the size of the flash in use in bytes
 // this will be a multiple of 4
 uint32_t GSL_GEN_GetFlashSizeInUse(void) {
+
+  uint32_t start = (uint32_t) GSL_GEN_MemoryFlashStart;
+  uint32_t end = start + 1024 * GSL_GEN_GetFlashSize();
+  uint32_t last_used = start;
+  uint32_t erased_val = 0xFFFFFFFF;
+
+  asm("mov r0, %[ev]\n"
+      "mov r1, %[s]\n"
+      "mov r3, %[e]\n"
+      "mov r2, r1\n"
+      "StartLoop%=:\n"
+      "cmp r1, r3\n"
+      "beq Exit%=\n"
+      "ldr r4, [r1], #4\n"
+      "cmp r4, r0\n"
+      "beq StartLoop%=\n"
+      "mov r2, r1\n"
+      "b   StartLoop%=\n"
+      "Exit%=:\n"
+      "mov %[lu], r2\n"
+  :
+  [lu] "=r" (last_used)
+  :
+  [s] "r" (start),
+  [e] "r" (end),
+  [ev] "r" (erased_val)
+  :
+  "r0", "r1", "r2", "r3", "r4");
+
+  return last_used - start;
+
+}
+
+// return the size of the flash in use in bytes
+// this will be a multiple of 4
+uint32_t OBSOLETE_GSL_GEN_GetFlashSizeInUse(void) {
+
   uint32_t * last_used = GSL_GEN_MemoryFlashStart - 1;
   uint32_t * end =
       GSL_GEN_MemoryFlashStart +
-      (GSL_GEN_GetFlashSize() * 1024 / sizeof(*end));
+          (GSL_GEN_GetFlashSize() * 1024 / sizeof(*end));
   const uint32_t kErasedValue = 0xFFFFFFFF;
+
   for (uint32_t * ptr = GSL_GEN_MemoryFlashStart; ptr < end; ++ptr) {
     if (*ptr != kErasedValue) {
       last_used = ptr;
     }
   }
+
   return (last_used - GSL_GEN_MemoryFlashStart + 1) *
       sizeof(*GSL_GEN_MemoryFlashStart);
 }
 
 // returns the CRC32 of the flash in use
 uint32_t GSL_GEN_GetFlashCRC(void) {
-  return GSL_CRC_Calculate((uint32_t *) GSL_GEN_MemoryFlashStart,
-      GSL_GEN_GetFlashSize() * (1024 / 4));
+  return GSL_CRC_Calculate(
+      (uint32_t *) GSL_GEN_MemoryFlashStart,
+      GSL_GEN_GetFlashSizeInUse() / 4);
 }
 
 // forward declarations
 float GSL_ADC_GetVRefIntCounts(void);
 float GSL_ADC_GetVBatCounts(void);
 float GSL_ADC_GetTemperatureC(void);
-
 
 // this is a helper function for outputting a clock speed in MHz
 // 1000000 -> "1 MHz"
@@ -361,6 +407,14 @@ void GSL_GEN_OutputClockFreq(uint32_t clock) {
 // output information about the processor state, including clock selection,
 // firmware versions, firmware size, voltage and temperature values
 void GSL_GEN_LogBanner(bool fast = false) {
+  // output separator
+  LOG("\n\n\n");
+  for (uint16_t line = 0; line < 3; ++line) {
+    LOG("\n");
+    for (uint16_t i = 0; i < 79; ++i) {
+      LOG("*");
+    }
+  }
   // check reset flags
   {
     bool header = false;
@@ -499,125 +553,125 @@ void GSL_GEN_LogBanner(bool fast = false) {
   // find actual APB1 prescaler
   uint32_t apb1_prescaler;
   switch (clock_config.APB1CLKDivider) {
-  case RCC_HCLK_DIV1:
-    apb1_prescaler = 1;
-    break;
-  case RCC_HCLK_DIV2:
-    apb1_prescaler = 2;
-    break;
-  case RCC_HCLK_DIV4:
-    apb1_prescaler = 4;
-    break;
-  case RCC_HCLK_DIV8:
-    apb1_prescaler = 8;
-    break;
-  case RCC_HCLK_DIV16:
-    apb1_prescaler = 16;
-    break;
-  default:
+    case RCC_HCLK_DIV1:
+      apb1_prescaler = 1;
+      break;
+    case RCC_HCLK_DIV2:
+      apb1_prescaler = 2;
+      break;
+    case RCC_HCLK_DIV4:
+      apb1_prescaler = 4;
+      break;
+    case RCC_HCLK_DIV8:
+      apb1_prescaler = 8;
+      break;
+    case RCC_HCLK_DIV16:
+      apb1_prescaler = 16;
+      break;
+    default:
     HALT("Invalid parameter");
   }
   // find actual APB2 prescaler
   uint32_t apb2_prescaler;
   switch (clock_config.APB2CLKDivider) {
-  case RCC_HCLK_DIV1:
-    apb2_prescaler = 1;
-    break;
-  case RCC_HCLK_DIV2:
-    apb2_prescaler = 2;
-    break;
-  case RCC_HCLK_DIV4:
-    apb2_prescaler = 4;
-    break;
-  case RCC_HCLK_DIV8:
-    apb2_prescaler = 8;
-    break;
-  case RCC_HCLK_DIV16:
-    apb2_prescaler = 16;
-    break;
-  default:
+    case RCC_HCLK_DIV1:
+      apb2_prescaler = 1;
+      break;
+    case RCC_HCLK_DIV2:
+      apb2_prescaler = 2;
+      break;
+    case RCC_HCLK_DIV4:
+      apb2_prescaler = 4;
+      break;
+    case RCC_HCLK_DIV8:
+      apb2_prescaler = 8;
+      break;
+    case RCC_HCLK_DIV16:
+      apb2_prescaler = 16;
+      break;
+    default:
     HALT("Invalid parameter");
   }
   LOG("\n- System clock selection: ");
   switch (clock_config.SYSCLKSource) {
-  case RCC_SYSCLKSOURCE_HSI:
-  case RCC_SYSCLKSOURCE_HSE:
-  {
-    if (clock_config.SYSCLKSource == RCC_SYSCLKSOURCE_HSI) {
-      ASSERT(osc_config.HSIState == RCC_HSI_ON);
-      LOG("HSI @ ");
-      GSL_GEN_OutputClockFreq(HSI_VALUE);
-      LOG(" (cal=", GSL_OUT_Hex(osc_config.HSICalibrationValue, 1), ")");
-    } else {
-      LOG("HSE");
-      if (osc_config.HSEState == RCC_HSE_BYPASS) {
-        LOG (" bypass");
+    case RCC_SYSCLKSOURCE_HSI:
+    case RCC_SYSCLKSOURCE_HSE:
+    {
+      if (clock_config.SYSCLKSource == RCC_SYSCLKSOURCE_HSI) {
+        ASSERT(osc_config.HSIState == RCC_HSI_ON);
+        LOG("HSI @ ");
+        GSL_GEN_OutputClockFreq(HSI_VALUE);
+        LOG(" (cal=", GSL_OUT_Hex(osc_config.HSICalibrationValue, 1), ")");
       } else {
-        ASSERT(osc_config.HSEState == RCC_HSE_ON);
+        LOG("HSE");
+        if (osc_config.HSEState == RCC_HSE_BYPASS) {
+          LOG (" bypass");
+        } else {
+          ASSERT(osc_config.HSEState == RCC_HSE_ON);
+        }
+        LOG(" @ assumed ");
+        GSL_GEN_OutputClockFreq(HSE_VALUE);
       }
-      LOG(" @ assumed ");
-      GSL_GEN_OutputClockFreq(HSE_VALUE);
+      LOG("\n- Prescalers: ");
+      LOG("AHB=/", ahb_prescaler);
+      LOG(", APB1=/", apb1_prescaler);
+      LOG(", APB2=/", apb2_prescaler);
+      LOG("\n- Clocks: ");
+      LOG("SYSCLK=");
+      GSL_GEN_OutputClockFreq(HAL_RCC_GetSysClockFreq());
+      LOG(", HCLK=");
+      GSL_GEN_OutputClockFreq(HAL_RCC_GetHCLKFreq());
+      break;
     }
-    LOG("\n- Prescalers: ");
-    LOG("AHB=/", ahb_prescaler);
-    LOG(", APB1=/", apb1_prescaler);
-    LOG(", APB2=/", apb2_prescaler);
-    LOG("\n- Clocks: ");
-    LOG("SYSCLK=");
-    GSL_GEN_OutputClockFreq(HAL_RCC_GetSysClockFreq());
-    LOG(", HCLK=");
-    GSL_GEN_OutputClockFreq(HAL_RCC_GetHCLKFreq());
-    break;
-  }
-  case RCC_SYSCLKSOURCE_PLLCLK:
-  {
-    LOG("PLLCLK");
-    ASSERT(osc_config.PLL.PLLState == RCC_PLL_ON);
-    switch (osc_config.PLL.PLLSource) {
-    case RCC_PLLSOURCE_HSI:
-      LOG(" using HSI @ ");
-      GSL_GEN_OutputClockFreq(HSI_VALUE);
-      LOG(" (cal=", GSL_OUT_Hex(osc_config.HSICalibrationValue, 1), ")");
-      break;
-    case RCC_PLLSOURCE_HSE:
-      LOG(" using HSE");
-      if (osc_config.HSEState == RCC_HSE_BYPASS) {
-        LOG (" bypass");
-      } else {
-        ASSERT(osc_config.HSEState == RCC_HSE_ON);
+    case RCC_SYSCLKSOURCE_PLLCLK:
+    {
+      LOG("PLLCLK");
+      ASSERT(osc_config.PLL.PLLState == RCC_PLL_ON);
+      switch (osc_config.PLL.PLLSource) {
+        case RCC_PLLSOURCE_HSI:
+          LOG(" using HSI @ ");
+          GSL_GEN_OutputClockFreq(HSI_VALUE);
+          LOG(" (cal=", GSL_OUT_Hex(osc_config.HSICalibrationValue, 1), ")");
+          break;
+        case RCC_PLLSOURCE_HSE:
+          LOG(" using HSE");
+          if (osc_config.HSEState == RCC_HSE_BYPASS) {
+            LOG (" bypass");
+          } else {
+            ASSERT(osc_config.HSEState == RCC_HSE_ON);
+          }
+          LOG(" @ assumed ");
+          GSL_GEN_OutputClockFreq(HSE_VALUE);
+          break;
+        default:
+        HALT("Invalid parameter");
       }
-      LOG(" @ assumed ");
-      GSL_GEN_OutputClockFreq(HSE_VALUE);
+      LOG("\n- PLL scalers: ");
+      LOG("M=/", osc_config.PLL.PLLM);
+      LOG(", N=x", osc_config.PLL.PLLN);
+      LOG(", P=/", osc_config.PLL.PLLP);
+      LOG(", Q=/", osc_config.PLL.PLLQ);
+      LOG("\n- Prescalers: ");
+      LOG("AHB=/", ahb_prescaler);
+      LOG(", APB1=/", apb1_prescaler);
+      LOG(", APB2=/", apb2_prescaler);
+      // Clocks: VCO=X MHz, SYSCLK=x MHz, HCLK=X MHz
+      uint32_t vco = HAL_RCC_GetSysClockFreq() * osc_config.PLL.PLLP;
+      LOG("\n- Clocks: VCO=");
+      GSL_GEN_OutputClockFreq(vco);
+      // vco must be within a specific range as given in the data sheets
+      if (vco < 192000000 || vco > 432000000) {
+        LOG(" (OUT OF RANGE)");
+      } else {
+        LOG(" (in range)");
+      }
+      LOG(", SYSCLK=");
+      GSL_GEN_OutputClockFreq(HAL_RCC_GetSysClockFreq());
+      LOG(", HCLK=");
+      GSL_GEN_OutputClockFreq(HAL_RCC_GetHCLKFreq());
       break;
+    }
     default:
-      HALT("Invalid parameter");
-    }
-    LOG("\n- PLL scalers: ");
-    LOG("M=/", osc_config.PLL.PLLM);
-    LOG(", N=x", osc_config.PLL.PLLN);
-    LOG(", P=/", osc_config.PLL.PLLP);
-    LOG(", Q=/", osc_config.PLL.PLLQ);
-    LOG("\n- Prescalers: ");
-    LOG("AHB=/", ahb_prescaler);
-    LOG(", APB1=/", apb1_prescaler);
-    LOG(", APB2=/", apb2_prescaler);
-    // Clocks: VCO=X MHz, SYSCLK=x MHz, HCLK=X MHz
-    uint32_t vco = HAL_RCC_GetSysClockFreq() * osc_config.PLL.PLLP;
-    LOG("\n- Clocks: VCO=");
-    GSL_GEN_OutputClockFreq(vco);
-    // vco must be within a specific range as given in the data sheets
-    if (vco < 192000000 || vco > 432000000) {
-      LOG(" (OUT OF RANGE)");
-    } else {
-      LOG(" (in range)");
-    }
-    LOG(", SYSCLK=");
-    GSL_GEN_OutputClockFreq(HAL_RCC_GetSysClockFreq());
-    LOG(", HCLK=");
-    GSL_GEN_OutputClockFreq(HAL_RCC_GetHCLKFreq());
-    break;
-  }
-  default:
     HALT("Invalid parameter");
   }
   LOG("\n- Clocks: PCLK1=");
@@ -640,62 +694,35 @@ void GSL_GEN_LogBanner(bool fast = false) {
   LOG("\n\nFirmware description:");
   LOG("\n- Compile datestamp: ", GSL_GEN_GetFirmwareTimestampLong());
   if (!fast) {
-    LOG("\n- Flash bytes in use: ", GSL_GEN_GetFlashSizeInUse());
-    LOG("\n- CRC32 of the flash: ", GSL_OUT_Hex(GSL_GEN_GetFlashCRC(), 4));
+    uint32_t length = GSL_GEN_GetFlashSizeInUse();
+    LOG("\n- Flash bytes in use: ", length);
+    uint32_t crc =
+        GSL_CRC_Calculate((uint32_t *) GSL_GEN_MemoryFlashStart, length / 4);
+    LOG("\n- CRC32 of the flash: ", GSL_OUT_Hex(crc));
   }
-}
-
-// a compact identification of the firmware
-struct GSL_GEN_FirmwareBrandStruct {
-  // compilation date of the firmware
-  unsigned char date[7];
-  // size of firmware in use
-  uint32_t used_space;
-  // CRC32 of the firmware in use
-  uint32_t crc32;
-  // equality check
-  bool operator == (const GSL_GEN_FirmwareBrandStruct & that) const {
-    return memcmp(this, &that, sizeof(that)) == 0;
-  }
-  // inequality check
-  bool operator != (const GSL_GEN_FirmwareBrandStruct & that) const {
-    return !(*this == that);
-  }
-  // less than check
-  bool operator < (const GSL_GEN_FirmwareBrandStruct & that) const {
-    return memcmp(this, &that, sizeof(that)) < 0;
-  }
-  // greater than
-  bool operator > (const GSL_GEN_FirmwareBrandStruct & that) const {
-    return memcmp(this, &that, sizeof(that)) > 0;
-  }
-  // assignment operator
-  void operator = (const GSL_GEN_FirmwareBrandStruct & that) {
-    memcpy(this, &that, sizeof(that));
-  }
-};
-
-// return a pointer to the firmware brand
-GSL_GEN_FirmwareBrandStruct * GSL_GEN_GetFirmwareBrand(void) {
-  // storage for the firmware brand on this chip
-  static GSL_GEN_FirmwareBrandStruct gsl_gen_firmware_brand = {"", 0, 0};
-  // initialize it on first use
-  if (gsl_gen_firmware_brand.used_space == 0) {
-    gsl_gen_firmware_brand.used_space = GSL_GEN_GetFlashSizeInUse();
-    gsl_gen_firmware_brand.crc32 = GSL_CRC_Calculate(
-        GSL_GEN_MemoryFlashStart,
-        gsl_gen_firmware_brand.used_space / 4);
-    memcpy(
-        gsl_gen_firmware_brand.date,
-        GSL_GEN_GetFirmwareTimestampHex(),
-        sizeof(gsl_gen_firmware_brand.date));
-  }
-  return &gsl_gen_firmware_brand;
 }
 
 // return true if the code is currently in an interrupt handler
 bool GSL_GEN_InInterrupt(void) {
   return (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0;
+}
+
+// return the current IRQ number
+uint32_t GSL_GEN_GetInterruptIRQ(void) {
+  ASSERT(GSL_GEN_InInterrupt);
+  return __get_IPSR() - 16;
+}
+
+// return the priorty of the given interrupt
+uint32_t GSL_GEN_GetCurrentIRQPriority(void) {
+  uint32_t preempt = 0;
+  uint32_t subpriority = 0;
+  HAL_NVIC_GetPriority(
+      (IRQn_Type) (__get_IPSR() - 16),
+      HAL_NVIC_GetPriorityGrouping(),
+      &preempt,
+      &subpriority);
+  return preempt;
 }
 
 // return the preempt priority of the currently executing interrupt
@@ -734,7 +761,7 @@ void GSL_GEN_ClipFloat(
 float GSL_GEN_GetBusyTime(float duration = 0.125f) {
   // number of system clocks in each loop
   // (calibrate this)
-  static uint32_t clocks_per_loop = 10;
+  static uint32_t clocks_per_loop = 12;
   // number of ticks from overhead before/after loop
   static uint32_t overhead_ticks = 0;
 
@@ -770,7 +797,7 @@ float GSL_GEN_GetBusyTime(float duration = 0.125f) {
   //LOG("\nThere were ", extra_ticks, " extra ticks for a duration of ",
   //    expected_ticks, " expected ticks");
   float busy_time = (float) extra_ticks / (extra_ticks + expected_ticks);
-  if (calibrate) {
+  if (false && calibrate) {
     LOG("\nGSL_GEN_GetBusyTime: clocks_per_loop=",
         clocks_per_loop,
         "(", GSL_OUT_FixedFloat(best_fit, 3), "), overhead_ticks=",
@@ -816,7 +843,7 @@ void GSL_GEN_CalculateMeanStdev(
 }
 
 // this hold the number of "pause interrupts" commands currently in place
-uint32_t gsl_gen_interrupt_stack = 0;
+volatile uint32_t gsl_gen_interrupt_stack = 0;
 
 // return true if interrupts are enabled
 inline bool GSL_GEN_AreInterruptsEnabled(void) {
@@ -850,3 +877,338 @@ void GSL_GEN_SystemReset(uint32_t delay_ms = 1000) {
   // reset the chip
   HAL_NVIC_SystemReset();
 }
+
+// output a register value
+void GSL_GEN_OutputRegister(
+    const char * name,
+    uint32_t value,
+    uint32_t mask,
+    uint32_t reset_value) {
+  ASSERT_NE(mask, 0u);
+  // if value is same as reset value, just return
+  if ((value & mask) == (reset_value & mask)) {
+    return;
+  }
+  // else output the information
+  LOG(" ", name, "=");
+  // get number of bits and offset of mask
+  uint8_t bit_offset = 0;
+  uint8_t bit_count = 0;
+  {
+    uint32_t temp_mask = mask;
+    while ((temp_mask & 1) == 0) {
+      temp_mask /= 2;
+      ++bit_offset;
+    }
+    while ((temp_mask & 1) == 1) {
+      temp_mask /= 2;
+      ++bit_count;
+    }
+    ASSERT_EQ(temp_mask, 0u);
+  }
+  // output register value
+  // output in binary unless 16 or 32 bits, in which case we output in
+  // hexadecimal
+  if (bit_count == 16) {
+    LOG(GSL_OUT_Hex((uint16_t) ((value & mask) >> bit_offset)));
+  } else if (bit_count == 32) {
+    LOG(GSL_OUT_Hex((uint32_t) ((value & mask) >> bit_offset)));
+  } else {
+    for (uint16_t i = 0; i < bit_count; ++i) {
+      bool bit_set = value & (1 << (bit_offset + bit_count - 1 - i));
+      LOG((bit_set) ? "1" : "0");
+    }
+  }
+}
+
+#ifdef GSL_CUSTOM_MEMSET
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// optimized version of memset
+// we split up the region into several segments
+//
+// base_ptr
+// * store single bytes
+// mid1
+// * store words, 4 at a time
+// mid2
+// * store words, 1 at a time
+// mid3
+// * store single bytes
+// end
+//
+// For large buffers, most of the time is spent between mid1 and mid2 which is
+// highly optimized.
+void * memset(void * base_ptr, int x, size_t length) {
+  const uint32_t int_size = sizeof(uint32_t);
+  static_assert(sizeof(uint32_t) == 4, "only supports 32 bit size");
+  // find first word-aligned address
+  uint32_t ptr = (uint32_t) base_ptr;
+  // get end of memory to set
+  uint32_t end = ptr + length;
+  // get location of first word-aligned address at/after the start, but not
+  // after the end
+  uint32_t mid1 = (ptr + int_size - 1) / int_size * int_size;
+  if (mid1 > end) {
+    mid1 = end;
+  }
+  // get location of last word-aligned address at/before the end
+  uint32_t mid3 = end / int_size * int_size;
+  // get end location of optimized section
+  uint32_t mid2 = mid1 + (mid3 - mid1) / (8 * int_size) * (8 * int_size);
+  // create a word-sized integer
+  uint32_t value = (uint8_t) x;
+  value |= value << 8;
+  value |= value << 16;
+  __ASM volatile (
+  // store bytes
+  "b Compare1%=\n"
+  "Store1%=:\n"
+  "strb %[value], [%[ptr]], #1\n"
+  "Compare1%=:\n"
+  "cmp %[ptr], %[mid1]\n"
+  "bcc Store1%=\n"
+  // store words optimized
+  "b Compare2%=\n"
+  "Store2%=:\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "str %[value], [%[ptr]], #4\n"
+  "Compare2%=:\n"
+  "cmp %[ptr], %[mid2]\n"
+  "bcc Store2%=\n"
+  // store words
+  "b Compare3%=\n"
+  "Store3%=:\n"
+  "str %[value], [%[ptr]], #4\n"
+  "Compare3%=:\n"
+  "cmp %[ptr], %[mid3]\n"
+  "bcc Store3%=\n"
+  // store bytes
+  "b Compare4%=\n"
+  "Store4%=:\n"
+  "strb %[value], [%[ptr]], #1\n"
+  "Compare4%=:\n"
+  "cmp %[ptr], %[end]\n"
+  "bcc Store4%=\n"
+  : // no outputs
+  : [value] "r"(value),
+  [ptr] "r"(ptr),
+  [mid1] "r"(mid1),
+  [mid2] "r"(mid2),
+  [mid3] "r"(mid3),
+  [end] "r"(end)
+  );
+  return base_ptr;
+}
+
+// do memmove on word-aligned data
+void * memmove32_reverse(void * base_dest, const void * base_src, size_t length) {
+  // should be byte aligned
+  ASSERT((uint32_t) base_dest % 4 == 0);
+  ASSERT((uint32_t) base_src % 4 == 0);
+  ASSERT((uint32_t) length % 4 == 0);
+
+  uint32_t src = ((uint32_t) base_src) + length - 4;
+  uint32_t dest = ((uint32_t) base_dest) + length - 4;
+  ASSERT_LT(src, dest);
+  // get midway
+  uint32_t src_mid = src - (length / 32 * 32);
+  // get end
+  uint32_t src_end = ((uint32_t) base_src) - 4;
+  uint32_t value = 0;
+  // run in assembly
+  __ASM volatile (
+  // store words optimized 8 at a time
+  "b Compare1%=\n"
+  "Store1%=:\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "Compare1%=:\n"
+  "cmp %[src], %[src_mid]\n"
+  "bgt Store1%=\n"
+  // store words one at a time
+  "b Compare2%=\n"
+  "Store2%=:\n"
+  "ldr %[value], [%[src]], #-4\n"
+  "str %[value], [%[dest]], #-4\n"
+  "Compare2%=:\n"
+  "cmp %[src], %[src_end]\n"
+  "bgt Store2%=\n"
+  : // no outputs
+  : [value] "r"(value),
+  [src] "r"(src),
+  [dest] "r"(dest),
+  [src_mid] "r"(src_mid),
+  [src_end] "r"(src_end)
+  );
+}
+
+void * memmove32_forward(void * dest, const void * src, size_t length) {
+  // should be byte aligned
+  ASSERT((uint32_t) dest % 4 == 0);
+  ASSERT((uint32_t) src % 4 == 0);
+  ASSERT((uint32_t) length % 4 == 0);
+  // src should be after dest
+  ASSERT_GT((uint32_t) src, (uint32_t) dest);
+  uint32_t value = 0;
+  // run in assembly
+  __ASM volatile (
+  // store words optimized 8 at a time
+  "b Compare1%=\n"
+  "Store1%=:\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "Compare1%=:\n"
+  "cmp %[src], %[src_mid]\n"
+  "bcc Store1%=\n"
+  // store words one at a time
+  "b Compare2%=\n"
+  "Store2%=:\n"
+  "ldr %[value], [%[src]], #4\n"
+  "str %[value], [%[dest]], #4\n"
+  "Compare2%=:\n"
+  "cmp %[src], %[src_end]\n"
+  "bcc Store2%=\n"
+  : // no outputs
+  : [value] "r"(value),
+  [src] "r"((uint32_t) src),
+  [dest] "r"((uint32_t) dest),
+  [src_mid] "r"((uint32_t) src + length / 32 * 32),
+  [src_end] "r"((uint32_t) src + length)
+  );
+}
+
+// do memmove on word aligned data
+void * memmove32(void * dest, const void * src, size_t length) {
+  if (dest > src) {
+    memmove32_reverse(dest, src, length);
+  } else if (dest < src) {
+    memmove32_forward(dest, src, length);
+  }
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+// test the memset functions
+void GSL_GEN_TestSingleMemSet(
+    uint8_t * buffer,
+    uint32_t length,
+    uint8_t * start,
+    uint8_t * end) {
+  ASSERT_GE((uint32_t) start, (uint32_t) buffer);
+  ASSERT_GE((uint32_t) end, (uint32_t) buffer);
+  ASSERT_LE((uint32_t) start, (uint32_t) (buffer + length));
+  ASSERT_LE((uint32_t) end, (uint32_t) (buffer + length));
+  // set all to zero
+  for (uint16_t i = 0; i < length; ++i) {
+    buffer[i] = 0;
+  }
+  // set range to 0xAA
+  memset(start, 0xAA, end - start);
+  //
+  // set range to 0xAA
+  /*for (uint8_t * ptr = start; ptr < end; ++ptr) {
+    *ptr = 0xAA;
+  }*/
+  // check all
+  //LOG("\nstart=", start - buffer, ", end=", end - buffer);
+  for (uint8_t * ptr = buffer; ptr < buffer + length; ++ptr) {
+    //LOG("\nptr=", ptr - buffer);
+    if (ptr < start) {
+      ASSERT_EQ(*ptr, 0);
+    } else if (ptr < end) {
+      ASSERT_EQ(*ptr, 0xAA);
+    } else {
+      ASSERT_EQ(*ptr, 0);
+    }
+  }
+}
+
+
+// test the memset functions
+void GSL_GEN_TestMemSet(void) {
+  // buffer
+  uint8_t buffer[128];
+  // size of buffer
+  const uint32_t capacity = sizeof(buffer);
+
+  //LOG("\nTesting memset...");
+
+  // test all offsets
+  for (uint16_t start = 8; start < 24; ++start) {
+    // test all offsets
+    for (uint16_t end = capacity - 24; end < capacity - 8; ++end) {
+      GSL_GEN_TestSingleMemSet(buffer, capacity, &buffer[start], &buffer[end]);
+    }
+    // test small sections
+    for (uint16_t end = start; end < start + 32; ++end) {
+      GSL_GEN_TestSingleMemSet(buffer, capacity, &buffer[start], &buffer[end]);
+    }
+  }
+  //LOG("\nDone");
+}
+
+// test the memset functions
+void GSL_GEN_TestMemmove32(void) {
+  const uint16_t length = 128;
+  // buffer
+  uint32_t buffer[length];
+  for (uint16_t i = 0; i < length; ++i) {
+    buffer[i] = i;
+  }
+  // move back 1 word
+  memmove32(&buffer[0], &buffer[1], (length - 1) * 4);
+  for (uint16_t i = 0; i < length - 1; ++i) {
+    ASSERT_EQ(buffer[i], i + 1);
+  }
+  // move forward 1 word
+  memmove32(&buffer[1], &buffer[0], (length - 1) * 4);
+  for (uint16_t i = 1; i < length; ++i) {
+    ASSERT_EQ(buffer[i], i);
+  }
+}
+
+//GSL_INITIALIZER gsl_gen_memset_test(GSL_GEN_TestMemSet);
+
+//GSL_INITIALIZER gsl_gen_memmove32_test(GSL_GEN_TestMemmove32);
+
+#endif

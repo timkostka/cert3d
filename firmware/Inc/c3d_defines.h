@@ -64,10 +64,12 @@ struct SignalMonitorStruct {
 };
 
 // buffer for DIR signals
-const uint16_t c3d_dir_buffer_capacity = 300;
+// must be a power of 2
+const uint16_t c3d_dir_buffer_capacity = 512;
 
 // buffer for STEP signals
-const uint16_t c3d_step_buffer_capacity = 300;
+// must be a power of 2
+const uint16_t c3d_step_buffer_capacity = 512;
 
 // channels we're monitoring
 SignalMonitorStruct c3d_signal[] = {
@@ -88,9 +90,12 @@ TIM_TypeDef * const c3d_master_timer = TIM4;
 const uint16_t c3d_signal_count = sizeof(c3d_signal) / sizeof(*c3d_signal);
 
 // monitor for each signal DMA channel
+C3D_SignalDmaMonitor c3d_signal_dma_monitor[c3d_signal_count];
+
+// monitor for each signal DMA channel
 C3D_DMA_Monitor<uint16_t> c3d_signal_usb_dma_monitor[c3d_signal_count];
 
-// step monitor for each signal DMA channel
+// step monitor for each signal channel
 C3D_DMA_Monitor<uint16_t> c3d_signal_step_dma_monitor[c3d_signal_count];
 
 // monitor for the ADC DMA channel
@@ -121,7 +126,7 @@ struct CommandStruct {
 
 void C3D_EnableStartStreamingFlag(void);
 void C3D_StopStreaming(void);
-void C3D_SendInfoPacket(void);
+void C3D_SendInfoHeaderPacket(void);
 void C3D_Debug(void);
 void C3D_Reset(void);
 
@@ -129,7 +134,7 @@ void C3D_Reset(void);
 const CommandStruct c3d_command[] = {
     {"start", C3D_EnableStartStreamingFlag},
     {"stop", C3D_StopStreaming},
-    {"info", C3D_SendInfoPacket},
+    {"info", C3D_SendInfoHeaderPacket},
     {"debug", C3D_Debug},
     {"reset", C3D_Reset},
 };
@@ -144,7 +149,7 @@ bool c3d_debug_flag = false;
 bool c3d_ignore_usb_output = false;
 
 // trigger to start streaming
-bool c3d_start_streaming_flag = false;
+bool c3d_start_streaming_flag = true;
 
 // number of axes
 const uint16_t c3d_motor_count = c3d_signal_count / 2;
@@ -191,3 +196,9 @@ struct C3D_PrinterGeometryStruct {
   // steps per mm
   float steps_per_mm[c3d_motor_count];
 } c3d_geometry;
+
+
+// debug pins
+PinEnum c3d_debug_pin[4] = {kPinB6, kPinB3, kPinD2, kPinC12};
+
+// buffer for creating packet

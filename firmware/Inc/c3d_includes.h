@@ -12,5 +12,6 @@
 #include "c3d_thermistor.h"
 #include "c3d_chunkbuffer.h"
 #include "c3d_dma_monitor.h"
+#include "c3d_signal_dma_monitor.h"
 #include "c3d_defines.h"
 #include "c3d_main.h"

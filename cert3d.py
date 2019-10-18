@@ -727,21 +727,36 @@ class InfoHeader:
         try:
             print("Reading header")
             # read info block
-            start = file.read(9).decode("utf-8")
-            assert start == "InfoStart"
-            # read clock speed
+            # char[9] start_string
+            start_string = file.read(9).decode("utf-8", "ignore")
+            print("- start_string: %s" % start_string)
+            assert start_string == "InfoStart"
+            # uint8_t header_packet_version
+            header_packet_version = struct.unpack("B", file.read(1))[0]
+            print("- header_packet_version: %d" % header_packet_version)
+            assert header_packet_version == 1
+            # uint8_t streaming_packet_version
+            streaming_packet_version = struct.unpack("B", file.read(1))[0]
+            print("- streaming_packet_version: %d" % streaming_packet_version)
+            assert streaming_packet_version == 1
+            # uint32_t system_clock
             self.system_clock = struct.unpack("L", file.read(4))[0]
             print("- Clock speed: %d" % self.system_clock)
+            # uint8_t signal_channel_count
             self.signal_count = struct.unpack("B", file.read(1))[0]
             print("- Signal count: %d" % self.signal_count)
+            # uint8_t adc_channel_count
             self.adc_count = struct.unpack("B", file.read(1))[0]
             print("- ADC count: %d" % self.adc_count)
+            # uint32_t ticks_per_adc_reading
             self.ticks_per_adc_reading = struct.unpack("L", file.read(4))[0]
             print("- Ticks per ADC reading: %d" % self.ticks_per_adc_reading)
             self.signal_frequencies = []
             self.signal_overflow_ticks = []
             for i in range(self.signal_count):
+                # uint32_t signal_clock
                 clock = struct.unpack("L", file.read(4))[0]
+                # uint32_t update_ticks
                 overflow = struct.unpack("L", file.read(4))[0]
                 self.signal_frequencies.append(clock)
                 self.signal_overflow_ticks.append(overflow)
@@ -749,6 +764,8 @@ class InfoHeader:
                     "  - Signal channel %d: clock=%d Hz, overflow=%d ticks"
                     % (i + 1, clock, overflow)
                 )
+            # float zero_value
+            # float high_value
             self.adc_ranges = [
                 (
                     struct.unpack("f", file.read(4))[0],
@@ -756,7 +773,8 @@ class InfoHeader:
                 )
                 for _ in range(self.adc_count)
             ]
-            stop = file.read(8).decode("utf-8")
+            # char[8] end_string
+            stop = file.read(8).decode("utf-8", "ignore")
             assert stop == "InfoStop"
             print(" - Success!")
             self.valid = True
@@ -773,21 +791,26 @@ class Packet:
     """A Packet is an output from a single process."""
 
     def __init__(self, file):
+        # uint8_t packet_number
         self.number = struct.unpack("B", file.read(1))[0]
+        # uint8_t channel_mask
         channel_mask = struct.unpack("B", file.read(1))[0]
         channel_edges = []
         for index in range(8):
             if channel_mask & (1 << index):
+                # uint8_t edge_count
                 count = struct.unpack("B", file.read(1))[0]
+                # uint16_t timer_edge
                 edges = struct.unpack("%dH" % count, file.read(2 * count))
                 channel_edges.append(edges)
             else:
                 channel_edges.append(tuple())
         self.channel_edges = channel_edges
-        # read adc values
+        # adc_sample_count
         adc_count = struct.unpack("B", file.read(1))[0]
         adc_values = []
         for _ in range(adc_count):
+            # uint16_t adc_value
             adc_values.append(struct.unpack("%dH" % 14, file.read(2 * 14)))
         self.adc_values = adc_values
 
@@ -1023,12 +1046,12 @@ def interpret_data(filename):
         packets = []
         while True:
             # read sync byte
-            if index % 8 == 0:
-                data = f.read(1)
-                if not data:
-                    break
-                sync = struct.unpack("B", data)[0]
-                assert sync == 0x77
+            # if index % 8 == 0:
+            #     data = f.read(1)
+            #     if not data:
+            #         break
+            #     sync = struct.unpack("B", data)[0]
+            #     assert sync == 0x77
             # read packets
             try:
                 this_packet = Packet(f)
@@ -1038,6 +1061,7 @@ def interpret_data(filename):
             index += 1
         # process data
         print("Found %d packets" % len(packets))
+    # test packets for packet number consistency
     # convert packets to BilevelData
     signals = packets_to_signals(packets, header)
     return signals

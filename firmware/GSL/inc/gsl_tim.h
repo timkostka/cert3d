@@ -796,7 +796,8 @@ void TIM3_IRQHandler(void) {
   HAL_TIM_IRQHandler(&gsl_tim3_htim);
 }
 
-void TIM4_IRQHandler(void) {
+//TDK: removed this
+void TIM4_IRQHandler_NOT(void) {
 #ifdef GSL_LOG_IRQ_ONCE
   LOG_ONCE("\nIn ", __FUNCTION__);
 #endif
@@ -1080,7 +1081,7 @@ void GSL_TIM_LogDetailedInformation(void) {
       GSL_TIM_OUTPUT_REGISTER_VALUE(CR2, CCDS);
     }
     if (TIMx->SMCR != reset_value) {
-      LOG("\n- SCMR:");
+      LOG("\n- SMCR:");
       GSL_TIM_OUTPUT_REGISTER_VALUE(SMCR, ETP);
       GSL_TIM_OUTPUT_REGISTER_VALUE(SMCR, ECE);
       GSL_TIM_OUTPUT_REGISTER_VALUE(SMCR, ETPS);
@@ -1187,6 +1188,10 @@ void GSL_TIM_LogDetailedInformation(void) {
       LOG("\n- ARR:");
       GSL_TIM_OUTPUT_REGISTER_VALUE(ARR, ARR);
     }
+    if (IS_TIM_REPETITION_COUNTER_INSTANCE(TIMx) && TIMx->RCR != reset_value) {
+      LOG("\n- RCR:");
+      GSL_TIM_OUTPUT_REGISTER_VALUE(RCR, REP);
+    }
     if (TIMx->CCR1 != reset_value) {
       LOG("\n- CCR1:");
       GSL_TIM_OUTPUT_REGISTER_VALUE(CCR1, CCR1);
@@ -1203,10 +1208,32 @@ void GSL_TIM_LogDetailedInformation(void) {
       LOG("\n- CCR4:");
       GSL_TIM_OUTPUT_REGISTER_VALUE(CCR4, CCR4);
     }
+    if (IS_TIM_BREAK_INSTANCE(TIMx) && TIMx->BDTR != reset_value) {
+      LOG("\n- BDTR:");
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, MOE);
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, AOE);
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, BKP);
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, OSSR);
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, OSSI);
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, LOCK);
+      GSL_TIM_OUTPUT_REGISTER_VALUE(BDTR, DTG);
+    }
     if (TIMx->DCR != reset_value) {
       LOG("\n- DCR:");
       GSL_TIM_OUTPUT_REGISTER_VALUE(DCR, DBL);
       GSL_TIM_OUTPUT_REGISTER_VALUE(DCR, DBA);
+    }
+    if (TIMx == TIM2 && TIMx->OR != reset_value) {
+      LOG("\n- OR:");
+      GSL_TIM_OUTPUT_REGISTER_VALUE(OR, ITR1_RMP);
+    }
+    if (TIMx == TIM5 && TIMx->OR != reset_value) {
+      LOG("\n- OR:");
+      GSL_TIM_OUTPUT_REGISTER_VALUE(OR, TI4_RMP);
+    }
+    if (TIMx == TIM11 && TIMx->OR != reset_value) {
+      LOG("\n- OR:");
+      GSL_TIM_OUTPUT_REGISTER_VALUE(OR, TI1_RMP);
     }
   }
 }

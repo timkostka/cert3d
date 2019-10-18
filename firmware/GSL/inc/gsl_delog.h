@@ -11,14 +11,6 @@
 // The USART peripheral is automatically initialized upon the first instance
 // of calling LOG().
 
-// TODO: there is some bug when a block occurs in the KCT_TESTER program that results
-// in an invalid message being sent.  not sure the cause of this.
-//
-// Tester chip on.
-// Current draw: 126.5 mA
-// Pinging tester processor...
-// BAD MESSAGE: unexpected data length (received:65535, expected:3) 0x8D 0x1B 0x01
-
 // If you send too much information and the buffer overflows, there are a few
 // configurable possibilities that may occur.
 
@@ -45,10 +37,10 @@ GSL_CODELOCK gsl_delog_lock;
 
 // if true, will output in blocking mode
 // (this is helpful to turn on while debugging a crash)
-bool gsl_delog_block_always = false;
+bool gsl_delog_block_always = true;
 
 // if true, will convert LF to CR+LF
-bool gsl_delog_convert_lf_to_crlf = true;
+bool gsl_delog_convert_lf_to_crlf = false;
 
 // if true, serial logger will block on buffer overflow and wait for the buffer
 // to clear before sending more characters.
@@ -58,7 +50,10 @@ bool gsl_delog_convert_lf_to_crlf = true;
 bool gsl_delog_block_on_overflow = true;
 
 // if true, a timestamp will be added immediately after a \n is encountered
-bool gsl_delog_add_timestamps = false;
+bool gsl_delog_add_timestamps = true;
+
+// if true, will add relative timestamps instead of absolute timestamps
+bool gsl_delog_relative_timestamps = false;
 
 // if true, strip leading zeroes from timestamps
 bool gsl_delog_strip_leading_zeroes_on_timestamps = true;
@@ -174,6 +169,10 @@ void GSL_DELOG_Initialize(void) {
   if (!initialized) {
     // first access to this should work
     ASSERT(gsl_delog_lock.Lock());
+    if (initialized) {
+      gsl_delog_lock.Unlock();
+      return;
+    }
     // set rate and protocol to 115200 8-E-1
     auto handle = GSL_UART_GetInfo(GSL_DELOG_PORT)->handle;
     // ensure settings are correct
@@ -196,7 +195,7 @@ void GSL_DELOG_Initialize(void) {
         GSL_DELOG_TransferComplete);
     // set interrupt priority
     GSL_UART_SetPriority(GSL_DELOG_PORT, GSL_DELOG_PRIORITY);
-    ASSERT(!initialized);
+    //ASSERT(!initialized);
     initialized = true;
     gsl_delog_lock.Unlock();
   }
@@ -277,13 +276,16 @@ void GSL_DELOG_AddRawBytes(const uint8_t * message, uint16_t size) {
       // send out what we can
       size = available - 1;
     } else {
-      if (GSL_GEN_InInterrupt()) {
+      if (GSL_GEN_InInterrupt() || !GSL_GEN_AreInterruptsEnabled()) {
         gsl_delog_discard_event_2 = true;
         return;
       }
+      // print out block event message at next opportunity
+      gsl_delog_block_event = true;
       // wait until space is free
       locked.lock->Unlock();
       while (available < size + 1U) {
+        GSL_DELOG_SendIfPresent();
         available = gsl_delog_buffer.GetCapacityRemaining();
       }
       locked.lock->WaitAndLock();
@@ -334,10 +336,10 @@ void GSL_DELOG_AddBytes(const uint8_t * message, uint16_t size) {
     }
   }
   // if we're not converting, just add the bytes
-  if (!gsl_delog_convert_lf_to_crlf) {
+  /*if (!gsl_delog_convert_lf_to_crlf) {
     GSL_DELOG_AddRawBytes(message, size);
     return;
-  }
+  }*/
   // true if CR was the last thing sent
   static bool sent_cr_last = false;
   // loop until all bytes are sent
@@ -359,15 +361,26 @@ void GSL_DELOG_AddBytes(const uint8_t * message, uint16_t size) {
         message += length;
       }
       // now send an LF or CRLF as necessary
-      if (!sent_cr_last) {
+      if (gsl_delog_convert_lf_to_crlf && !sent_cr_last) {
         GSL_DELOG_AddRawBytes((const uint8_t *) "\r\n", 2);
       } else {
         GSL_DELOG_AddRawBytes((const uint8_t *) "\n", 1);
       }
       // send timestamp as necessary
       if (gsl_delog_add_timestamps) {
+        static GSL_DEL_LongTime last_stamp;
         GSL_DELOG_AddRawText("[");
-        const char * text = GSL_GEN_GetTimestampSinceReset();
+        const char * text = nullptr;
+        if (gsl_delog_relative_timestamps) {
+          GSL_DELOG_AddRawText("+");
+          auto time = GSL_DEL_GetLongTime();
+          uint64_t new_ticks = time.ticks;
+          time.ticks -= last_stamp.ticks;
+          last_stamp.ticks = new_ticks;
+          text = GSL_GEN_FormTimestamp(time);
+        } else {
+          text = GSL_GEN_GetTimestampSinceReset();
+        }
         if (gsl_delog_strip_leading_zeroes_on_timestamps) {
           while (strncmp("000:", text, 4) == 0) {
             text = &text[4];
@@ -389,7 +402,7 @@ void GSL_DELOG_AddBytes(const uint8_t * message, uint16_t size) {
 }
 
 // add a message to the buffer and begin transmission if possible
-void GSL_DELOG_AddMessage(const char * message) {
+void GSL_DELOG_AddMessage(const char *message) {
   GSL_DELOG_AddBytes((const uint8_t *) message, strlen(message));
   GSL_DELOG_SendIfPresent();
 }
@@ -430,3 +443,34 @@ void GSL_DELOG_UnitTests(void) {
 }
 */
 
+// output remainder of the debug log manually
+// this assumes the stream is already enabled
+// (this may repeat some output)
+void GSL_DELOG_OutputRemainderBlocking(void) {
+  // disable interrupts
+  __disable_irq();
+  // alias peripherals
+  USART_TypeDef * USARTx = GSL_DELOG_PORT;
+  DMA_Stream_TypeDef * stream = GSL_UART_GetInfo(USARTx)->hdmatx->Instance;
+  // wait for DMA to finish
+  while (stream->NDTR != 0) {
+  }
+  // disable DMA
+  CLEAR_BIT(USARTx->CR3, USART_CR3_DMAT);
+  // get start of stuff to output
+  uint8_t * ptr = gsl_delog_buffer.secured_buffer_start_;
+  // get end of output
+  uint8_t * const end = gsl_delog_buffer.free_buffer_start_;
+  // send characters manually
+  while (ptr != end) {
+    if (ptr == gsl_delog_buffer.buffer_end_) {
+      ptr = gsl_delog_buffer.buffer_start_;
+    }
+    // wait for TXE to be set
+    while (!READ_BIT(USARTx->SR, USART_SR_TXE)) {
+    }
+    // send character
+    USARTx->DR = *ptr;
+    ++ptr;
+  }
+}

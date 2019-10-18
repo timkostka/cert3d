@@ -105,7 +105,7 @@ struct C3D_ChunkBuffer {
 
   // store a single variable
   template <class T>
-  void StageVariable(const T & variable) {
+  void StageVariable(const T variable) {
     StageData(&variable, sizeof(variable));
   }
 

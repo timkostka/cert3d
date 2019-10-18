@@ -2,7 +2,7 @@
 
 // These are defines for the Cert3D rev1 board.
 
-#define GSL_LOG_IRQ_ONCE
+//#define GSL_LOG_IRQ_ONCE
 
 #define GSL_LED_ERROR_PIN kPinC15
 #define GSL_LED_STATUS_PIN kPinNone

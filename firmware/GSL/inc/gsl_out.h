@@ -15,53 +15,53 @@
 // e.g. GSL_OUT_Hex(16, 2) --> "0x0010"
 const char * GSL_OUT_Hex(uint32_t value, uint8_t length_in_bytes) {
   ASSERT_LE(length_in_bytes, 4);
-	// number of buffers
-	// the last X calls to this function are valid
-	const uint8_t kBufferCount = 3;
-	// the size of each buffer
-	const uint32_t kBufferSize = 11;
-	// the actual buffers
-	static char buffer_array[kBufferCount * kBufferSize];
+  // number of buffers
+  // the last X calls to this function are valid
+  const uint8_t kBufferCount = 3;
+  // the size of each buffer
+  const uint32_t kBufferSize = 11;
+  // the actual buffers
+  static char buffer_array[kBufferCount * kBufferSize];
 
-	// the current buffer
-	static uint8_t next_buffer = 0;
-	// pointer to the buffer to use for this call
-	char * buffer = &buffer_array[next_buffer * kBufferSize];
-	++next_buffer;
-	next_buffer %= kBufferCount;
+  // the current buffer
+  static uint8_t next_buffer = 0;
+  // pointer to the buffer to use for this call
+  char * buffer = &buffer_array[next_buffer * kBufferSize];
+  ++next_buffer;
+  next_buffer %= kBufferCount;
 
-	// ensure length is appropriate
-	//if (kBufferSize < 3 + 2 * length) {
-	  // bad things
-		//ERROR("buffer not long enough");
-	//}
+  // ensure length is appropriate
+  //if (kBufferSize < 3 + 2 * length) {
+  // bad things
+  //ERROR("buffer not long enough");
+  //}
 
-	// position within the current buffer
-	int32_t pos = kBufferSize - 1;
-	// null terminate
-	buffer[pos] = '\0';
+  // position within the current buffer
+  int32_t pos = kBufferSize - 1;
+  // null terminate
+  buffer[pos] = '\0';
 
-	// go through each character
-	while (length_in_bytes-- != 0) {
-		for (uint8_t i = 0; i < 2; ++i) {
-			uint8_t x = value % 16;
-			value /= 16;
-			if (x < 10) {
-				buffer[--pos] = '0' + x;
-			} else {
-				buffer[--pos] = 'A' - 10 + x;
-			}
-		}
-	}
+  // go through each character
+  while (length_in_bytes-- != 0) {
+    for (uint8_t i = 0; i < 2; ++i) {
+      uint8_t x = value % 16;
+      value /= 16;
+      if (x < 10) {
+        buffer[--pos] = '0' + x;
+      } else {
+        buffer[--pos] = 'A' - 10 + x;
+      }
+    }
+  }
 
-	// add the leading "0x" to indicate a hex number
-	buffer[--pos] = 'x';
-	buffer[--pos] = '0';
+  // add the leading "0x" to indicate a hex number
+  buffer[--pos] = 'x';
+  buffer[--pos] = '0';
 
-	ASSERT_GE(pos, 0);
+  ASSERT_GE(pos, 0);
 
-	// return the expression
-	return &buffer[pos];
+  // return the expression
+  return &buffer[pos];
 }
 
 // format an unsigned integer into hex format with the given number of bits
@@ -85,8 +85,8 @@ const char * GSL_OUT_Binary(uint32_t value, uint8_t length_in_bits) {
 
   // ensure length is appropriate
   //if (kBufferSize < 3 + 2 * length) {
-    // bad things
-    //ERROR("buffer not long enough");
+  // bad things
+  //ERROR("buffer not long enough");
   //}
 
   // position within the current buffer
@@ -113,13 +113,13 @@ const char * GSL_OUT_Binary(uint32_t value, uint8_t length_in_bits) {
 }
 
 const char * GSL_OUT_Hex(uint8_t value) {
-	return GSL_OUT_Hex(value, 1);
+  return GSL_OUT_Hex(value, 1);
 }
 const char * GSL_OUT_Hex(uint16_t value) {
-	return GSL_OUT_Hex(value, 2);
+  return GSL_OUT_Hex(value, 2);
 }
 const char * GSL_OUT_Hex(uint32_t value) {
-	return GSL_OUT_Hex(value, 4);
+  return GSL_OUT_Hex(value, 4);
 }
 
 // output a string of memory as binary, starting from MSB
@@ -150,93 +150,66 @@ void GSL_OUT_LogHex(const uint8_t * ptr, uint16_t length) {
 
 // output a float with the given number of decimal places
 // e.g. GSL_OUT_FixedFloat(1.0f, 2) --> "0.00"
-const char * GSL_OUT_FixedFloat(float value, uint8_t places) {
+const char * GSL_OUT_FixedFloat(
+    float value,
+    uint8_t places,
+    bool force_sign) {
 
-	// number of buffers
-	// the last X calls to this function are valid
-	const uint8_t kBufferCount = 3;
-	// the size of each buffer
-	const uint32_t kBufferSize = 32;
-	// the actual buffers
-	static char buffer_array[kBufferCount][kBufferSize];
+  // number of buffers
+  // the last X calls to this function are valid
+  const uint8_t kBufferCount = 3;
+  // the size of each buffer
+  const uint32_t kBufferSize = 32;
+  // the actual buffers
+  static char buffer_array[kBufferCount][kBufferSize];
 
-	// the current buffer
-	static uint8_t next_buffer = 0;
-	// pointer to the buffer to use for this call
-	char * buffer = buffer_array[next_buffer];
-	next_buffer = (next_buffer + 1) % kBufferCount;
+  // the current buffer
+  static uint8_t next_buffer = 0;
+  // pointer to the buffer to use for this call
+  char * buffer = buffer_array[next_buffer];
+  next_buffer = (next_buffer + 1) % kBufferCount;
 
-	// position within the current buffer
-	int32_t pos = kBufferSize - 1;
+  // detect NaN value
+  if (isnan(value)) {
+    strcpy(buffer, "NaN");
+    return buffer;
+  }
 
-	// detect NaN value
-	if (isnan(value)) {
-		strcpy(buffer, "NaN");
-		return buffer;
-	}
-
-	// detect +Inf and -Inf values
-	if (isinf(value)) {
-		if (value < 0) {
-			strcpy(buffer, "-Inf");
-		} else {
-			strcpy(buffer, "+Inf");
-		}
-		return buffer;
-	}
-
-	// if negative, put a negative sign in front
-	bool negative = value < 0;
-	if (negative) {
-		value *= -1.0f;
-	}
-
-	// round to the given number of decimal places and turn into an integer
-	for (uint8_t places2 = places; places2 != 0; --places2) {
-	  value *= 10.0f;
-	}
-	uint32_t int_value = value + 0.5f;
-
-	// we write the digits from right to left
-	bool all_zero = true;
-
-	// null terminate
-	buffer[pos] = '\0';
-	--pos;
-	if (places > 0) {
-		for (uint32_t i = 0; i < places; ++i) {
-			buffer[pos] = '0' + (char)(int_value % 10);
-			if (int_value % 10) {
-			  all_zero = false;
-			}
-			int_value /= 10;
-			--pos;
-		}
-		buffer[pos] = '.';
-		--pos;
-	}
-	if (int_value == 0) {
-		buffer[pos] = '0';
-		--pos;
-	}
-	while (int_value > 0) {
-		buffer[pos] = '0' + (int_value % 10);
-    if (int_value % 10) {
-      all_zero = false;
+  // detect +Inf and -Inf values
+  if (isinf(value)) {
+    if (value < 0) {
+      strcpy(buffer, "-Inf");
+    } else {
+      strcpy(buffer, "+Inf");
     }
-		int_value /= 10;
-		--pos;
-	}
+    return buffer;
+  }
 
-	// add negative sign
-	if (negative && !all_zero) {
-		buffer[pos] = '-';
-		--pos;
-	}
+  // if negative, put a negative sign in front
+  bool negative = value < 0;
+  if (negative) {
+    value *= -1.0f;
+  }
 
-	// return pointer to null-terminated string
-	return &buffer[pos + 1];
+  // print out the integer portion
+  float whole = 0.0f;
+  float fraction = modf(value, &whole);
 
+  buffer[0] = 0;
+  if (negative) {
+    strcpy(&buffer[strlen(buffer)], "-");
+  } else if (force_sign) {
+    strcpy(&buffer[strlen(buffer)], "+");
+  }
+  strcpy(&buffer[strlen(buffer)], GSL_OUT_Integer((uint32_t) whole));
+  // add decimal places
+  if (places > 0) {
+    strcpy(&buffer[strlen(buffer)], ".");
+    uint32_t decimal_places = floorf((1.0f + fraction) * powf(10.0f, places));
+    strcpy(&buffer[strlen(buffer)], &GSL_OUT_Integer(decimal_places)[1]);
+  }
+  // return string
+  return buffer;
 }
 
 // output a number into the given number of characters
@@ -546,3 +519,20 @@ void GSL_OUT_LogPaddedText(
     }
   }
 }
+
+// sanity check some stuff
+void GSL_OUT_SanityCheck(void) {
+  ASSERT_EQ(strcmp(GSL_OUT_Integer(0), "0"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_Integer(1), "1"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_SignedInteger(-1), "-1"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_Integer((uint32_t) 4294967295), "4294967295"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_SignedInteger((int32_t) -2147483648), "-2147483648"), 0);
+
+  ASSERT_EQ(strcmp(GSL_OUT_FixedFloat(0.0f, 3), "0.000"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_FixedFloat(0.0f, 0), "0"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_FixedFloat(-1.123f, 3), "-1.123"), 0);
+  ASSERT_EQ(strcmp(GSL_OUT_FixedFloat(1.123f, 3), "1.123"), 0);
+}
+
+// do at startup
+GSL_INITIALIZER gsl_out_sanity_checker(GSL_OUT_SanityCheck);

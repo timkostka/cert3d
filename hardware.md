@@ -201,7 +201,7 @@ If no edges are detected, each packet is `2 + 2 + 8 * 2 = 20` bytes.  At a packe
 
 #### Output processing try #3
 
-The primary of the #2 methos is that 0.8 Mbps is a lot for overhead.  We'll try to reduce that.  We also will reduce the amount we send the sync word since the connection shouldn't be lossy.
+The primary drawback of the #2 method is that 0.8 Mbps is a lot for overhead.  We'll try to reduce that.  We also will reduce the amount we send the sync word since the connection shouldn't be lossy.
 
 * (Only if packet number % 8 == 0) Sync word `0x77`
 

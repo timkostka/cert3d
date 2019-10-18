@@ -13,8 +13,13 @@ GSL_ERROR_HandlerFunction gsl_error_handler = nullptr;
 
 // this will output the current code position to the log
 #define LOG_POSITION \
-  LOG("\n", GSL_GEN_GetTimestampSinceReset()); \
-  LOG(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__)
+  LOG("\n"); \
+  if (!gsl_delog_add_timestamps) { \
+    LOG(GSL_GEN_GetTimestampSinceReset(), ": "); \
+  } \
+  LOG("In file ", GSL_BaseFilename(__FILE__)); \
+  LOG(" at line ", __LINE__); \
+  LOG(" in function ", __func__)
 
 // forward defines so blinking the error LED will work
 void GSL_PIN_Toggle(PinEnum pin);
@@ -51,38 +56,37 @@ const char * GSL_BaseFilename (const char  * filename) {
   return ptr;
 }
 
+// forward declaration
+void GSL_DELOG_OutputRemainderBlocking(void);
+
+// blink the error LED
+[[noreturn]] void GSL_ERR_BlinkError(void) {
+  __disable_irq();
+  GSL_DELOG_OutputRemainderBlocking();
+  GSL_PIN_Deinitialize(GSL_LED_ERROR_PIN);
+  GSL_PIN_Initialize(
+      GSL_LED_ERROR_PIN,
+      GPIO_MODE_OUTPUT_PP,
+      GPIO_NOPULL,
+      GPIO_SPEED_LOW);
+  GSL_PIN_SetLow(GSL_LED_ERROR_PIN);
+  while (1) {
+    for (uint8_t led_blink_cycle = 0; led_blink_cycle < 6; ++led_blink_cycle) {
+      GSL_DEL_MS(100);
+      GSL_PIN_Toggle(GSL_LED_ERROR_PIN);
+    }
+    GSL_DEL_MS(1000);
+    if (gsl_error_handler) {
+      GSL_DEL_MS(900);
+      gsl_error_handler();
+    }
+  }
+}
+
 // if handler is defined, call it, else loop forever
 // at the start, we set the USART interrupt priority to the highest possible
 // so that the debug log clears out
-#ifdef GSL_LED_ERROR_PIN
-#define BLINK_ERROR \
-  while (1) { \
-    GSL_PIN_Deinitialize(GSL_LED_ERROR_PIN); \
-    GSL_PIN_Initialize(GSL_LED_ERROR_PIN, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL, GPIO_SPEED_LOW); \
-    GSL_PIN_SetLow(GSL_LED_ERROR_PIN); \
-    while (1) { \
-      for (uint8_t led_blink_cycle = 0; led_blink_cycle < 6; ++led_blink_cycle) { \
-        GSL_DEL_MS(100); \
-        GSL_PIN_Toggle(GSL_LED_ERROR_PIN); \
-      } \
-      GSL_DEL_MS(1000); \
-      if (gsl_error_handler) { \
-        GSL_DEL_MS(900); \
-        gsl_error_handler(); \
-      } \
-      /*asm volatile ("bkpt 0");*/ \
-    }; \
-  } \
-  ((void) 0)
-#else
-#define BLINK_ERROR \
-  GSL_DEL_MS(200); \
-  if (gsl_error_handler) { \
-    gsl_error_handler(); \
-  } \
-  asm volatile ("bkpt 0"); \
-  while (1)
-#endif
+#define BLINK_ERROR GSL_ERR_BlinkError()
 
 // run the following statements the first X times it is encountered
 #define LIMITED_RUN(times) \
@@ -90,7 +94,7 @@ const char * GSL_BaseFilename (const char  * filename) {
     if (run_count <= (times)) { \
       ++run_count; \
     } \
-    if (run_count <= (times)
+    if (run_count <= (times))
 
 // output a message the first X times it is encountered
 #define LIMITED_LOG(times, ...) \
@@ -109,16 +113,19 @@ const char * GSL_BaseFilename (const char  * filename) {
 // output the position once
 #define LOG_POSITION_ONCE \
     LOG_ONCE("\n", GSL_GEN_GetTimestampSinceReset()); \
-    LOG_ONCE(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__);
+    LOG_ONCE(": In file ", GSL_BaseFilename(__FILE__), " at line ", __LINE__, " in function ", __func__)
 
 // log the file, function and line number
 #define LOG_LOCATION \
-  LOG("\n\nWithin file: ", GSL_BaseFilename(__FILE__)); \
-  LOG(  "\n   Function: ", __func__); \
-  LOG(  "\n       Line: ", __LINE__);
+  LOG("\n"); \
+  LOG("\nWithin file: ", GSL_BaseFilename(__FILE__)); \
+  LOG("\n   Function: ", __func__); \
+  LOG("\n       Line: ", __LINE__)
 
 // stop execution with the following message
-#define HALT(...) LOG("\n\n"); LOG(__VA_ARGS__); \
+#define HALT(...) \
+  LOG("\n\n"); \
+  LOG(__VA_ARGS__); \
   LOG_LOCATION; \
   LOG("\n\nExecution has been halted."); \
   BLINK_ERROR
@@ -163,11 +170,12 @@ const char * GSL_BaseFilename (const char  * filename) {
     LOG("\n\nExecution has been halted."); \
     BLINK_ERROR; \
   } \
-((void) 0)
+  ((void) 0)
 
 // run a function that return a HAL_StatusTypeDef and error out if it doesn't
 // return HAL_OK
-#define HAL_RUN(...) { \
+#define HAL_RUN(...) \
+  { \
     HAL_StatusTypeDef result = __VA_ARGS__; \
     if (result != HAL_OK) { \
       LOG("\n\nHAL routine failed:"); \
@@ -181,13 +189,13 @@ const char * GSL_BaseFilename (const char  * filename) {
       LOG("\nWe were expecting HAL_OK (0)."); \
       LOG_LOCATION; \
       LOG("\n\nExecution has been halted."); \
-      BLINK_ERROR;} \
+      BLINK_ERROR; \
     } \
-((void) 0)
+  } \
+  ((void) 0)
 
 // these must be defined elsewhere
 void LOG(const char * message);
-//void LOG(uint32_t value);
 
 const char * GSL_OUT_Integer(uint32_t value);
 
@@ -262,7 +270,7 @@ void LOG(const unsigned long int & value) {
   LOG((uint32_t) ptr);
 }*/
 
-const char * GSL_OUT_FixedFloat(float value, uint8_t places);
+const char * GSL_OUT_FixedFloat(float value, uint8_t places, bool force_sign = false);
 
 // log a float
 void LOG(float value) {
@@ -348,7 +356,7 @@ void LOG(T one, T2 two, T3 three, T4 four, T5 five, T6 six, T7 seven) {
 
 // log seven things
 template <class T, class T2, class T3, class T4, class T5, class T6, class T7,
-          class T8>
+    class T8>
 void LOG(T one, T2 two, T3 three, T4 four, T5 five, T6 six, T7 seven,
          T8 eight) {
   LOG(one);
@@ -363,7 +371,7 @@ void LOG(T one, T2 two, T3 three, T4 four, T5 five, T6 six, T7 seven,
 
 // log seven things
 template <class T, class T2, class T3, class T4, class T5, class T6, class T7,
-          class T8, class T9>
+    class T8, class T9>
 void LOG(T one, T2 two, T3 three, T4 four, T5 five, T6 six, T7 seven,
          T8 eight, T9 nine) {
   LOG(one);
@@ -376,14 +384,6 @@ void LOG(T one, T2 two, T3 three, T4 four, T5 five, T6 six, T7 seven,
   LOG(eight);
   LOG(nine);
 }
-
-// report an error if there is one (else do nothing)
-/*void GSL_ReportError(HAL_StatusTypeDef status) {
-  if (status != HAL_OK) {
-    LOG("\nERROR: Received HAL error code ", (uint32_t) status);
-    HALT("ERROR");
-  }
-}*/
 
 extern "C" {
 
