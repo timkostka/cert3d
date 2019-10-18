@@ -26,7 +26,7 @@ void C3D_CreatePacket(void) {
   }
 
   // output packet number
-  c3d_usb_buffer.StageVariable((uint8_t) c3d_process_count);
+  c3d_usb_buffer.StageVariable((uint8_t) c3d_process_count / 2);
   ++byte_count;
 
   // create channel mask

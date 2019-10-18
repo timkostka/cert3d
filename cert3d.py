@@ -792,7 +792,7 @@ class Packet:
 
     def __init__(self, file):
         # uint8_t packet_number
-        self.number = struct.unpack("B", file.read(1))[0]
+        self.packet_number = struct.unpack("B", file.read(1))[0]
         # uint8_t channel_mask
         channel_mask = struct.unpack("B", file.read(1))[0]
         channel_edges = []
@@ -1062,6 +1062,8 @@ def interpret_data(filename):
         # process data
         print("Found %d packets" % len(packets))
     # test packets for packet number consistency
+    numbers = [x.packet_number for x in packets]
+    print(numbers)
     # convert packets to BilevelData
     signals = packets_to_signals(packets, header)
     return signals
