@@ -18,6 +18,8 @@ struct C3D_SignalDmaMonitor {
   uint16_t tail_index;
   // middle of stuff to send
   uint16_t middle_index;
+  // head index
+  uint16_t head_index;
   // DMA stream for this monitor
   DMA_Stream_TypeDef * dma_stream;
   // get index of the head

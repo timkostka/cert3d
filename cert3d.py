@@ -226,7 +226,7 @@ def derivate_data(data: PlotData, idle_corrections=False):
                 continue
             if points[i][1] == points[i - 1][1]:
                 continue
-            print(i, duration, cutoff, duration / cutoff)
+            # print(i, duration, cutoff, duration / cutoff)
             # add ramp down
             if points[i - 1][1] == 0:
                 points.insert(i, (points[i][0] - cutoff, 0.0))
@@ -370,10 +370,10 @@ class AnalysisWindow(AnalysisWindowBase):
         self.save_tests()
         # signal child thread to exit
         # join child thread
-        print("Joining C3D thread")
-        self.c3d_port_thread.exit_and_join()
-        print("Joining printer port thread")
-        self.printer_port_thread.exit_and_join()
+        #print("Joining C3D thread")
+        #self.c3d_port_thread.exit_and_join()
+        #print("Joining printer port thread")
+        #self.printer_port_thread.exit_and_join()
         print("Closing window")
         # destory this window
         self.Destroy()
@@ -417,6 +417,9 @@ class AnalysisWindow(AnalysisWindowBase):
     def event_button_reset_click(self, event):
         self.c3d_port_thread.send_command(b"reset")
 
+    def event_button_status_click(self, event):
+        self.c3d_port_thread.send_command(b"status")
+
     def event_button_clear_log_click(self, event):
         global clear_log_file
         clear_log_file = True
@@ -426,7 +429,7 @@ class AnalysisWindow(AnalysisWindowBase):
         if data is None:
             print("ERROR: no data in file")
             return
-        print([x.get_length() for x in data])
+        # print([x.get_length() for x in data])
         # replace signal data with data from file
         self.scope_panel.clear()
         for index, this_data in enumerate(data):
@@ -775,6 +778,7 @@ class InfoHeader:
             ]
             # char[8] end_string
             stop = file.read(8).decode("utf-8", "ignore")
+            print("- end_string: %s" % start_string)
             assert stop == "InfoStop"
             print(" - Success!")
             self.valid = True
@@ -827,12 +831,13 @@ def packets_to_signals(packets, header: InfoHeader):
     system_ticks_per_packet = (
         header.system_clock
         * header.signal_overflow_ticks[0]
-        / header.signal_frequencies[0]
-        / 2
+        // header.signal_frequencies[0]
     )
     assert system_ticks_per_packet == int(system_ticks_per_packet)
+    print("system_ticks_per_packet =", system_ticks_per_packet)
     system_ticks_per_packet = int(system_ticks_per_packet)
     print("- Converting readings to per-signal lists")
+    # add first data point
     edges = [[0] for _ in range(header.signal_count)]
     # convert edges for each channel to another format
     # signal_ticks[0] = [(cycle1, value1), (cycle2, value2), etc...]
@@ -844,46 +849,56 @@ def packets_to_signals(packets, header: InfoHeader):
                 signal_ticks[channel_index].extend(
                     [(packet_index, delta) for delta in cycle]
                 )
+                if cycle != tuple(sorted(cycle)):
+                    print("BAD DATA on channel %d, packet %d: %s"
+                          % (channel_index, packet_index, cycle))
     # now process each channel
     print("- Processing channels")
     for channel_index, ticks in enumerate(signal_ticks):
         # store range of deltas
-        delta_values = []
+        # delta_values = []
         # get timer ticks per packet
         ticks_per_packet = (
             system_ticks_per_packet
             * header.signal_frequencies[channel_index]
             // header.system_clock
         )
-        expected_offset = -ticks_per_packet // 8 - ticks_per_packet
-        # get overflow
-        overflow = 2 * ticks_per_packet
-        assert overflow == header.signal_overflow_ticks[channel_index]
-        for (cycle, delta) in signal_ticks[channel_index]:
-            expected = cycle * ticks_per_packet + expected_offset
-            delta_from_expected = (delta - expected) % overflow
-            delta_values.append(delta_from_expected)
-            this_tick = expected + delta_from_expected
-            edges[channel_index].append(this_tick)
-        if delta_values:
-            print(
-                "expected=%d, overflow=%d, delta min=%d, max=%d"
-                % (
-                    expected_offset,
-                    overflow,
-                    min(delta_values) + expected_offset,
-                    max(delta_values) + expected_offset,
-                )
-            )
+        # expected_offset = -ticks_per_packet // 8 - ticks_per_packet
+        # # get overflow
+        # overflow = ticks_per_packet
+        # assert overflow == header.signal_overflow_ticks[channel_index]
+        edges[channel_index].extend(x * ticks_per_packet + y
+                                    for x, y in signal_ticks[channel_index])
+        # for (cycle, delta) in signal_ticks[channel_index]:
+        #     expected = cycle * ticks_per_packet + expected_offset
+        #     delta_from_expected = (delta - expected) % overflow
+        #     delta_values.append(delta_from_expected)
+        #     this_tick = expected + delta_from_expected
+        #     edges[channel_index].append(this_tick)
+        # if delta_values:
+        #     print(
+        #         "expected=%d, overflow=%d, delta min=%d, max=%d"
+        #         % (
+        #             expected_offset,
+        #             overflow,
+        #             min(delta_values) + expected_offset,
+        #             max(delta_values) + expected_offset,
+        #         )
+        #     )
         # adjust edges so no edge is negative:
-        for i in range(1, len(edges[channel_index])):
-            while edges[channel_index][i] < edges[channel_index][i - 1]:
-                print("WARNING: adjusted edge to make it non-negative")
-                print("         possibly something is out of sync")
-                print("         restarting may fix")
-                edges[channel_index][i] += overflow
-        # add data to finish signals
-        edges[channel_index].append(len(packets) * ticks_per_packet)
+        # if False:
+        #     for i in range(1, len(edges[channel_index])):
+        #         while edges[channel_index][i] < edges[channel_index][i - 1]:
+        #             print("WARNING: adjusted edge to make it non-negative")
+        #             print("         possibly something is out of sync")
+        #             print("         restarting may fix")
+        #             edges[channel_index][i] += overflow
+        # add last data point to finish the signal
+        edges[channel_index].append((len(packets) + 1) * ticks_per_packet)
+    # ensure time is monotonic increasing
+    # for channel_index, these_edges in enumerate(edges):
+    #     for i in range(1, len(these_edges)):
+    #         assert these_edges[i] >= these_edges[i - 1]
     # now unpack adc values
     adc_values = []
     for packet in packets:
@@ -1045,14 +1060,6 @@ def interpret_data(filename):
         index = 0
         packets = []
         while True:
-            # read sync byte
-            # if index % 8 == 0:
-            #     data = f.read(1)
-            #     if not data:
-            #         break
-            #     sync = struct.unpack("B", data)[0]
-            #     assert sync == 0x77
-            # read packets
             try:
                 this_packet = Packet(f)
                 packets.append(this_packet)
@@ -1062,8 +1069,7 @@ def interpret_data(filename):
         # process data
         print("Found %d packets" % len(packets))
     # test packets for packet number consistency
-    numbers = [x.packet_number for x in packets]
-    print(numbers)
+    # print("packet_numbers = %s" % [x.packet_number for x in packets])
     # convert packets to BilevelData
     signals = packets_to_signals(packets, header)
     return signals
@@ -1095,6 +1101,7 @@ class C3DPortMonitor:
         # self.overwrite_log_file = True
         # create and start the Thread object
         self.thread = Thread(target=self.entry_point)
+        self.thread.setDaemon(True)
         self.thread.start()
         # history for the data rate
         self.data_rate_history = [(time.time(), 0)]
@@ -1251,16 +1258,16 @@ class C3DPortMonitor:
         """Return True if thread is alive."""
         return self.thread.is_alive()
 
-    def exit_and_join(self):
-        """Exit this thread and join it."""
-        self.exit_thread = True
-        start = time.time()
-        while self.thread.is_alive():
-            time.sleep(0.010)
-            if time.time() - start > 5:
-                print("ERROR: slave thread not exiting")
-                exit(1)
-        self.thread.join()
+    # def exit_and_join(self):
+    #     """Exit this thread and join it."""
+    #     self.exit_thread = True
+    #     start = time.time()
+    #     while self.thread.is_alive():
+    #         time.sleep(0.010)
+    #         if time.time() - start > 5:
+    #             print("ERROR: slave thread not exiting")
+    #             exit(1)
+    #     self.thread.join()
 
     def send_command(self, command):
         """Send a command over the Cert3D board port."""
@@ -1297,6 +1304,7 @@ class PrinterPortMonitor:
         self.progress_gauge = gauge
         # create and start the Thread object
         self.thread = Thread(target=self.entry_point)
+        self.thread.setDaemon(True)
         self.thread.start()
         # hold the c3d board thread object
         self.c3d_thread = c3d_thread
@@ -1477,16 +1485,16 @@ class PrinterPortMonitor:
         else:
             print("WARNING: port not open.  command ignored")
 
-    def exit_and_join(self):
-        """Exit this thread and join it."""
-        self.exit_thread = True
-        start = time.time()
-        while self.thread.is_alive():
-            time.sleep(0.010)
-            if time.time() - start > 5:
-                print("ERROR: slave thread not exiting")
-                exit(1)
-        self.thread.join()
+    # def exit_and_join(self):
+    #     """Exit this thread and join it."""
+    #     self.exit_thread = True
+    #     start = time.time()
+    #     while self.thread.is_alive():
+    #         time.sleep(0.010)
+    #         if time.time() - start > 5:
+    #             print("ERROR: slave thread not exiting")
+    #             exit(1)
+    #     self.thread.join()
 
 
 def run_gui():

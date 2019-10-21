@@ -298,6 +298,7 @@ class TriStateData(Data):
         )
         # DEBUG
         if not check:
+            print("Data not valid")
             print([x[1] for x in self.points[:50]])
             print([x[1] for x in self.points[-50:]])
         assert check
@@ -390,6 +391,7 @@ class BilevelData(Data):
                 for i in range(len(self.edges) - 1)
             ]
             indices = [i for i, x in enumerate(delta) if x <= 0]
+            print("Data not valid")
             print(indices)
             print([self.edges[i - 1 : i + 2] for i in indices][:5])
         # DEBUG
@@ -590,9 +592,9 @@ class PlotData(Data):
             x1, y1 = self.points[i - 1]
             x2, y2 = self.points[i]
             x3, y3 = self.points[i + 1]
-            alpha = (x2 - x1) / (x3 - x1)
+            alpha = (x2 - x1) / (x3 - x1) if x3 != x1 else 0
             y_test = y1 + (y3 - y1) * alpha
-            if y2 == y_test:
+            if y2 == y_test or x3 == x1:
                 del self.points[i]
                 i -= 1
 

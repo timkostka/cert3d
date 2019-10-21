@@ -252,6 +252,9 @@ class AnalysisWindowBase ( wx.Frame ):
         self.button_reset = wx.Button( self, wx.ID_ANY, u"Reset C3D", wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer52.Add( self.button_reset, 0, wx.ALL, 5 )
 
+        self.button_status = wx.Button( self, wx.ID_ANY, u"Status", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer52.Add( self.button_status, 0, wx.ALL, 5 )
+
         self.button_clear_log = wx.Button( self, wx.ID_ANY, u"Clear Data", wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizer52.Add( self.button_clear_log, 0, wx.ALL, 5 )
 
@@ -300,6 +303,7 @@ class AnalysisWindowBase ( wx.Frame ):
         self.button_debug_2.Bind( wx.EVT_BUTTON, self.event_button_debug_2_click )
         self.button_trim.Bind( wx.EVT_BUTTON, self.event_button_trim_click )
         self.button_reset.Bind( wx.EVT_BUTTON, self.event_button_reset_click )
+        self.button_status.Bind( wx.EVT_BUTTON, self.event_button_status_click )
         self.button_clear_log.Bind( wx.EVT_BUTTON, self.event_button_clear_log_click )
         self.button_exit.Bind( wx.EVT_BUTTON, self.event_menu_file_exit )
         self.Bind( wx.EVT_TIMER, self.event_timer_update_ui, id=wx.ID_ANY )
@@ -382,6 +386,9 @@ class AnalysisWindowBase ( wx.Frame ):
         event.Skip()
 
     def event_button_reset_click( self, event ):
+        event.Skip()
+
+    def event_button_status_click( self, event ):
         event.Skip()
 
     def event_button_clear_log_click( self, event ):
