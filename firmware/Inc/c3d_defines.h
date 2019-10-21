@@ -115,7 +115,7 @@ GSL_LPFVAL c3d_output_bits_per_process(10.0f);
 C3D_ChunkBuffer c3d_usb_buffer;
 
 // if true, stream data to USB
-bool c3d_output_to_usb = false;
+//bool c3d_output_to_usb = false;
 
 // commands
 struct CommandStruct {
@@ -126,6 +126,7 @@ struct CommandStruct {
 };
 
 void C3D_EnableStartStreamingFlag(void);
+void C3D_EnableStopStreamingFlag(void);
 void C3D_StopStreaming(void);
 void C3D_SendInfoHeaderPacket(void);
 void C3D_Debug(void);
@@ -135,8 +136,7 @@ void C3D_Status(void);
 // commands
 const CommandStruct c3d_command[] = {
     {"start", C3D_EnableStartStreamingFlag},
-    {"stop", C3D_StopStreaming},
-    {"info", C3D_SendInfoHeaderPacket},
+    {"stop", C3D_EnableStopStreamingFlag},
     {"debug", C3D_Debug},
     {"reset", C3D_Reset},
     {"status", C3D_Status},
@@ -149,10 +149,13 @@ const uint16_t c3d_command_count = sizeof(c3d_command) / sizeof(*c3d_command);
 bool c3d_debug_flag = false;
 
 // if True, will ignore data sent to USB
-bool c3d_ignore_usb_output = false;
+//bool c3d_ignore_usb_output = false;
 
-// trigger to start streaming
-bool c3d_start_streaming_flag = false;
+// flag for enabled or disabled streaming
+bool c3d_streaming_flag = false;
+
+// target streaming flag
+bool c3d_target_streaming_flag = false;
 
 // number of axes
 const uint16_t c3d_motor_count = c3d_signal_count / 2;
