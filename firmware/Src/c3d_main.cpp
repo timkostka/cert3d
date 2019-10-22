@@ -47,13 +47,13 @@
 
 // output timer counts
 void C3D_OutputTimerCounts(void) {
-  __disable_irq();
+  GSL_GEN_DisableInterrupts();
   uint32_t c1 = TIM1->CNT;
   uint32_t c2 = TIM2->CNT;
   uint32_t c3 = TIM3->CNT;
   uint32_t c4 = TIM4->CNT;
   uint32_t c8 = TIM8->CNT;
-  __enable_irq();
+  GSL_GEN_EnableInterrupts();
   LOG("\nc3d=", c3d_process_count);
   LOG(", TIM1->CNT=", c1, ", TIM2->CNT=", c2, ", TIM3->CNT=", c3);
   LOG(", TIM4->CNT=", c4, ", TIM8->CNT=", c8);
@@ -171,9 +171,10 @@ void C3D_InitializeSignalTimers(void) {
     // set number of transfers to do
     stream->NDTR = signal.buffer_capacity;
     // set peripheral address
-    stream->PAR = (uint32_t) (&TIMx->CCR1 +
-        (signal.timer_channel - TIM_CHANNEL_1) /
-            (TIM_CHANNEL_2 - TIM_CHANNEL_1) * (TIMx->CCR2 - TIMx->CCR1));
+    stream->PAR = (uint32_t) &(
+        (signal.timer_channel == TIM_CHANNEL_1) ? TIMx->CCR1 :
+        (signal.timer_channel == TIM_CHANNEL_2) ? TIMx->CCR2 :
+        (signal.timer_channel == TIM_CHANNEL_3) ? TIMx->CCR3 : TIMx->CCR4);
     // set memory address
     stream->M0AR = (uint32_t) signal.buffer;
     // enable DMA stream
@@ -269,7 +270,7 @@ void C3D_InitializeADC(void) {
 }
 
 // initialize signal timers and DMA stuff
-void C3D_InitTimers(void) {
+/*void C3D_InitTimers(void) {
   // initialize the master clock
   {}
   // enable clocks
@@ -379,7 +380,7 @@ void C3D_InitTimers(void) {
     GSL_PIN_Toggle(c3d_debug_pin[0]);
   }
 
-}
+}*/
 
 // create and send a new data packet
 void C3D_CreatePacket(void) {
@@ -388,6 +389,15 @@ void C3D_CreatePacket(void) {
   for (uint16_t s = 0; s < c3d_signal_count; ++s) {
     auto & monitor = c3d_signal_dma_monitor[s];
     monitor.head_index = monitor.GetHeadIndex();
+  }
+  // if first packet, skip all edges
+  if (c3d_first_packet) {
+    c3d_first_packet = false;
+    for (uint16_t s = 0; s < c3d_signal_count; ++s) {
+      auto & monitor = c3d_signal_dma_monitor[s];
+      monitor.tail_index = monitor.head_index;
+      monitor.middle_index = monitor.head_index;
+    }
   }
 
   // number of bytes added by this packet
@@ -401,7 +411,6 @@ void C3D_CreatePacket(void) {
     const auto & middle_index = monitor.middle_index;
     // move middle edge to end of edges to send
     uint32_t head_index = monitor.head_index;
-    // TODO: implement
     while (head_index != middle_index &&
         monitor.buffer[(head_index + capacity - 1) % capacity] <
             monitor.middle_count) {
@@ -496,10 +505,12 @@ void C3D_CreatePacket(void) {
 extern "C" {
 
 void TIM4_IRQHandler(void) {
+  /*static uint32_t ticks = 0;
+  uint32_t new_ticks = GSL_DEL_Ticks();
+  LIMITED_LOG(10, "\ndelta_ticks=", new_ticks - ticks);
+  ticks = new_ticks;*/
+
   GSL_PIN_SetHigh(c3d_debug_pin[0]);
-  LIMITED_RUN(5) {
-    C3D_OutputTimerCounts();
-  }
   // clear update bit
   TIM4->SR = ~TIM_SR_UIF;
   // if not outputting, just return
@@ -509,6 +520,10 @@ void TIM4_IRQHandler(void) {
   }
   // increment process count
   ++c3d_process_count;
+  // output timer counts first few times
+  /*LIMITED_RUN(5) {
+    C3D_OutputTimerCounts();
+  }*/
   // on odd counters, update middle index
   if (c3d_process_count % 2) {
     for (uint16_t s = 0; s < c3d_signal_count; ++s) {
@@ -703,107 +718,8 @@ void C3D_StartStreaming(void) {
   C3D_InitializeSignalTimers();
   // initialize adc timer
   C3D_InitializeADC();
-  // start the timer
-
-  // enable timer clocks (but not the timers themselves)
-//  GSL_TIM_EnableClock(c3d_master_timer);
-//  GSL_TIM_EnableClock(c3d_adc_timer);
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    GSL_TIM_EnableClock(c3d_signal[i].TIMx);
-//  }
-  // disable master timer and clear all interrupts
-//  CLEAR_BIT(c3d_master_timer->CR1, TIM_CR1_CEN);
-  // clear all pending interrupts
-//  c3d_master_timer->SR = 0;
-//  c3d_adc_timer->SR = 0;
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    c3d_signal[i].TIMx->SR = 0;
-//  }
-  // disable slave timers
-//  CLEAR_BIT(c3d_adc_timer->CR1, TIM_CR1_CEN);
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    CLEAR_BIT(c3d_signal[i].TIMx->CR1, TIM_CR1_CEN);
-//  }
-  // ensure all timers are disabled
-//  ASSERT(READ_BIT(c3d_master_timer->CR1, TIM_CR1_CEN) == 0);
-//  ASSERT(READ_BIT(c3d_adc_timer->CR1, TIM_CR1_CEN) == 0);
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    ASSERT(READ_BIT(c3d_signal[i].TIMx->CR1, TIM_CR1_CEN) == 0);
-//  }
-  // disable DMA requests DIER_CCxDE bits to disable DMA requests
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    auto & signal = c3d_signal[i];
-//    CLEAR_BIT(signal.TIMx->DIER, TIM_DIER_CC1DE << (signal.timer_channel / 4));
-//  }
-  // set up master timer base unit
-//  c3d_master_timer->PSC = 0;
-//  c3d_master_timer->ARR = 0x3FFF;
-//  c3d_master_timer->CNT = c3d_master_timer->ARR - 1;
-  // set up the ADC timer base unit
-//  c3d_adc_timer->PSC = 99;
-//  c3d_adc_timer->ARR = 8399;
-//  c3d_adc_timer->CNT = 0;
-  // set up signal timer base units
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    c3d_signal[i].TIMx->PSC = 0;
-//    if (c3d_signal[i].TIMx == TIM1 || c3d_signal[i].TIMx == TIM8) {
-//      c3d_signal[i].TIMx->ARR = 0xFFFF;
-//    } else {
-//      ASSERT(c3d_signal[i].TIMx == TIM3);
-//      c3d_signal[i].TIMx->ARR = 0x7FFF;
-//    }
-//    c3d_signal[i].TIMx->CNT = 0;
-//  }
-  // set up ADC
-  {
-  }
-  // set up ADC DMA channel
-//  {
-//    auto & stream = c3d_adc_dma_monitor.dma_stream;
-//    // disable
-//    CLEAR_BIT(stream->CR, DMA_SxCR_EN);
-//    // clear register
-//    stream->CR = 0;
-//    // set channel selection
-//    {
-//      ASSERT(c3d_adc == ADC1 || c3d_adc == ADC2 || c3d_adc == ADC3);
-//      uint32_t chsel =
-//          (c3d_adc == ADC1) ? DMA_CHANNEL_0 :
-//          (c3d_adc == ADC2) ? DMA_CHANNEL_1 :
-//          (c3d_adc == ADC3) ? DMA_CHANNEL_2 : 0;
-//      MODIFY_REG(stream->CR, DMA_SxCR_CHSEL, chsel);
-//    }
-//    // set memory size
-//    MODIFY_REG(stream->CR, DMA_SxCR_MSIZE, DMA_MDATAALIGN_HALFWORD);
-//    // set peripheral size
-//    MODIFY_REG(stream->CR, DMA_SxCR_PSIZE, DMA_PDATAALIGN_HALFWORD);
-//    // set memory increment
-//    MODIFY_REG(stream->CR, DMA_SxCR_MINC, DMA_MINC_ENABLE);
-//    // set circular mode
-//    MODIFY_REG(stream->CR, DMA_SxCR_CIRC, DMA_CIRCULAR);
-//    // set high priority (below signal channels)
-//    MODIFY_REG(stream->CR, DMA_SxCR_PL, DMA_PRIORITY_HIGH);
-//    // set direction
-//    MODIFY_REG(stream->CR, DMA_SxCR_DIR, DMA_PERIPH_TO_MEMORY);
-//    // set number of transfers to do
-//    stream->NDTR = c3d_adc_buffer_capacity;
-//    // set peripheral address
-//    stream->PAR = (uint32_t) &(c3d_adc->DR);
-//    // set memory address
-//    stream->M0AR = (uint32_t) c3d_adc_buffer;
-//  }
-  /*{
-    LIMITED_RUN(1) {
-      GSL_TIM_LogDetailedInformation();
-      GSL_DMA_LogDetailedInformation(DMA1);
-      GSL_DMA_LogDetailedInformation(DMA2);
-      for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-        GSL_DMA_LogDetailedStreamInformation(c3d_signal[i].dma_stream);
-      }
-      GSL_DMA_LogDetailedStreamInformation(c3d_adc_dma_monitor.dma_stream);
-      GSL_ADC_LogDetailedInformation(c3d_adc);
-    }
-  }*/
+  // set first packet flag
+  c3d_first_packet = true;
   // ensure all timers are disabled
   ASSERT(READ_BIT(c3d_master_timer->CR1, TIM_CR1_CEN) == 0);
   ASSERT(READ_BIT(c3d_adc_timer->CR1, TIM_CR1_CEN) == 0);
@@ -815,7 +731,7 @@ void C3D_StartStreaming(void) {
   for (uint16_t i = 0; i < c3d_signal_count; ++i) {
     ASSERT(c3d_signal[i].TIMx->CNT == 0);
   }
-  // read DMA monitors
+  // read all data from DMA monitors
   {
     auto & monitor = c3d_adc_dma_monitor;
     while (monitor.GetAvailable()) {
@@ -847,16 +763,6 @@ void C3D_StartStreaming(void) {
       }
     }
   }
-  // enable ADC DMA stream
-//  SET_BIT(c3d_adc_dma_monitor.dma_stream->CR, DMA_SxCR_EN);
-  // enable signal DMA streams
-//  for (uint16_t i = 0; i < c3d_signal_count; ++i) {
-//    SET_BIT(c3d_signal[i].dma_stream->CR, DMA_SxCR_EN);
-//  }
-  // start the master, which will start all chained timers
-//  c3d_master_timer->ARR = 0x3FFF;
-//  c3d_master_timer->CNT = c3d_master_timer->ARR - 1;
-//  MODIFY_REG(c3d_master_timer->CR2, TIM_CR2_MMS, TIM_TRGO_UPDATE);
   // reset process counter
   c3d_process_count = 0xFFFFFFFF;
   if (false) {
@@ -1295,6 +1201,11 @@ void C3D_Main(void) {
 
   GSL_DEL_Initialize();
 
+  // set all debug pins low
+  for (uint16_t i = 0; i < 4; ++i) {
+    GSL_PIN_SetLow(c3d_debug_pin[i]);
+  }
+
   GSL_PRO_Reset();
 
   /*LOG_POSITION;
@@ -1575,6 +1486,11 @@ void C3D_Main(void) {
   // main loop
   while (true) {
 
+    ASSERT_EQ(gsl_gen_interrupt_stack, 0);
+
+    //GSL_PIN_SetHigh(c3d_debug_pin[3]);
+    //GSL_PIN_SetLow(c3d_debug_pin[3]);
+
     // enable or disable streaming if flag is switched
     if (c3d_streaming_flag != c3d_target_streaming_flag) {
       c3d_streaming_flag = c3d_target_streaming_flag;
@@ -1596,12 +1512,12 @@ void C3D_Main(void) {
     }
 
     // process steps to determine motor positions
-    GSL_PIN_SetHigh(c3d_debug_pin[2]);
+    //GSL_PIN_SetHigh(c3d_debug_pin[2]);
     //C3D_UpdateMotorPositions();
 
     // process endstops
-    C3D_UpdateEndstops();
-    GSL_PIN_SetLow(c3d_debug_pin[2]);
+    //C3D_UpdateEndstops();
+    //GSL_PIN_SetLow(c3d_debug_pin[2]);
 
   }
 

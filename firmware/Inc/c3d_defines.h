@@ -157,6 +157,9 @@ bool c3d_streaming_flag = false;
 // target streaming flag
 bool c3d_target_streaming_flag = false;
 
+// true if first packet since streaming started
+bool c3d_first_packet = false;
+
 // number of axes
 const uint16_t c3d_motor_count = c3d_signal_count / 2;
 static_assert(c3d_signal_count % 2 == 0, "");
