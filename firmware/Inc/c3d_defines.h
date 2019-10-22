@@ -31,7 +31,7 @@ const uint16_t c3d_adc_channel_count =
 TIM_TypeDef * const c3d_adc_timer = TIM2;
 
 // approximate frequency of ADC readings
-const float c3d_adc_frequency = 100.0f;
+const uint32_t c3d_adc_frequency = 100;
 
 // high resistor on adc resistor divider
 const float c3d_adc_high_resistor = 7500.0f;
@@ -40,7 +40,7 @@ const float c3d_adc_high_resistor = 7500.0f;
 const float c3d_adc_low_resistor = 1000.0f;
 
 // ADC buffer size
-const uint16_t c3d_adc_buffer_capacity = c3d_adc_channel_count * 4;
+const uint16_t c3d_adc_buffer_capacity = c3d_adc_channel_count * 6;
 
 // ADC output buffer
 uint16_t c3d_adc_buffer[c3d_adc_buffer_capacity];
@@ -96,8 +96,8 @@ C3D_SignalDmaMonitor c3d_signal_dma_monitor[c3d_signal_count];
 //C3D_DMA_Monitor<uint16_t> c3d_signal_usb_dma_monitor[c3d_signal_count];
 
 // step monitor for each signal channel
-//C3D_DMA_Monitor<uint16_t> c3d_signal_step_dma_monitor[c3d_signal_count];
-C3D_SignalDmaMonitor c3d_signal_step_dma_monitor[c3d_signal_count];
+C3D_DMA_Monitor<uint16_t> c3d_signal_step_dma_monitor[c3d_signal_count];
+//C3D_SignalDmaMonitor c3d_signal_step_dma_monitor[c3d_signal_count];
 
 // monitor for the ADC DMA channel
 C3D_DMA_Monitor<uint16_t> c3d_adc_dma_monitor;
@@ -213,4 +213,4 @@ PinEnum c3d_debug_pin[4] = {kPinB6, kPinB3, kPinD2, kPinC12};
 // buffer for creating packet
 
 // if true, output ADC channels
-const bool c3d_output_adc_channels = false;
+const bool c3d_output_adc_channels = true;
