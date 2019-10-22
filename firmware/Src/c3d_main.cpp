@@ -84,12 +84,13 @@ void C3D_InitializeSignalTimers(void) {
       *reg &= ~mask << (((signal.timer_channel / 4) % 2) * 8);
       *reg |= config << (((signal.timer_channel / 4) % 2) * 8);
     }
-    // set CCxP = 1 and CCxE = 1
+    // set CCxE = 1 to enable capture
+    // set CCxNP/CCxP to 11 to enable capture on both rising and falling edges
     {
       auto & reg = TIMx->CCER;
       uint32_t mask = 0b1111;
-      uint32_t config = 0b0011;
-      reg &= ~mask << ((signal.timer_channel / 4) * 4);
+      uint32_t config = TIM_CCER_CC1E | TIM_CCER_CC1P | TIM_CCER_CC1NP;
+      reg &= ~(mask << ((signal.timer_channel / 4) * 4));
       reg |= config << ((signal.timer_channel / 4) * 4);
     }
   }

@@ -27,6 +27,11 @@ struct C3D_DMA_Monitor {
     return dma_stream->NDTR == last_NDTR;
   }
 
+  // clear
+  void Clear() {
+    last_NDTR = dma_stream->NDTR;
+  }
+
   // return the number of available values
   uint16_t GetAvailable(void) const {
     uint16_t available = last_NDTR;

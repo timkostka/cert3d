@@ -26,6 +26,15 @@ struct C3D_SignalDmaMonitor {
   uint16_t GetHeadIndex(void) const {
     return capacity - dma_stream->NDTR;
   }
+  // update the head index
+  void Update(void) {
+    head_index = GetHeadIndex();
+  }
+  // clear all values
+  void Clear(void) {
+    middle_index = head_index;
+    tail_index = head_index;
+  }
   // pop a value
   uint16_t Pop(void) {
     // ensure something is there
