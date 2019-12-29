@@ -60,3 +60,59 @@ What other way can we get motor position from processing STEP/DIR pins via hardw
 I could add another chip to the board and dedicate that to handling this.  This complicates board layout, firmware, debugging, etc.  Not an attractive option.
 
 This is only needed to simulate endstops.  I could simply only simulate endstops when necessary.  For example, when doing a homing operation.  Travel speeds during homing should be nowhere near the max speed.  I would expect speeds of under 20mm/s.  At 80 step/mm, this would be 1600 steps/s, which is very doable in software.
+
+## HRTIM usage
+
+It is possible to use the HRTIM to capture up to 5 channels at 480MHz, but we need to capture 10 channels.
+
+## STM32H7 microprocessor
+
+We will switch to a 480 MHz STM32H745 microprocessor, which runs a 480 MHz M7 core and a 240 MHz M4 core.
+
+To start, we will only use the M7 core.  Perhaps the M4 core can act do the endstops.
+
+### USB connectivity
+
+The bandwidth of FS HSB (up to 12Mbps) is probably fine.  I would like to get higher, but it would involve adding an external PHY.
+
+### ADCs
+
+Same as before, we'll add pins to read ADCs.  The ADC will be 16 bit.  TIM8 will triggert the ADCs.  Transfer from ADC to memory will use 1 DMA stream.
+
+## Programmer
+
+I'll use the ST-Link V3 Mini programmer with the standard 14-pin adapter.
+
+## Protection resistors
+
+I'm going to remove all protection diodes/resistors.  This is just a development board, we can add them back on later.  They just make building it a bit harder and more space intensive.
+
+## Timer channels
+
+I'm not going to use the HRTIM.  Instead, I'll use the standard timers at 240 MHz, or maybe 200 MHz.  I need 10 channels, but I'll add 12:
+* TIM1_CH1-4
+* TIM2_CH1-4
+* TIM3_CH1-4
+
+Each of these channels uses a DMA stream.
+
+Maybe HRTIM can be used as a high-speed timer between events?  If not, I'll use use TIM4/TIM5.
+
+## Debug stream
+
+The M7 core will send the debug stream to USART1 via DMA.  No debug stream on the M4 core, for now.  This uses 1-2 DMA channels, depending if we want input as well as output.
+
+## Debug pins
+
+I will have a number of pins used for debug purposes only.  Probably 4 is enough, but maybe 8 would be better.
+
+## Endstop pins
+
+Ideally, we will have 12 GPIO inputs for end stop pins.
+
+## DMA streams
+
+There are 16 DMA streams available which will be used as follows:
+* (12) Input channels
+* (2) USART debug stream
+* (1) ADC transfer to memory
