@@ -3,6 +3,8 @@ This file shows some examples of our motion post-processing scheme.
 
 """
 
+import math
+
 import matplotlib.pyplot as plt
 
 
@@ -12,8 +14,12 @@ omega_n = 500
 # damping ratio
 zeta = 0.15
 
-# linear motion per step
-mm_per_step = 1
+# steps per mm
+steps_per_mm = 80
+
+# divisor for default timestep
+# (set to 1 to use default timestep)
+timestep_divider = 1000
 
 
 def generate_ramp(ramp_time=0.25, amplitude=1, step_count=10, end_time=0.5):
@@ -24,6 +30,59 @@ def generate_ramp(ramp_time=0.25, amplitude=1, step_count=10, end_time=0.5):
     if end_time > ramp_time:
         steps.append((end_time, amplitude))
     return steps
+
+
+def generate_motion(distance=10, speed=100):
+    """
+    Return a step corresponding to a linear motion.
+
+    distance: distance in mm
+    speed: speed in mm/s
+
+    """
+    step_count = distance * steps_per_mm
+    dt = 1 / (speed * steps_per_mm)
+    return list((i * dt, i / steps_per_mm) for i in range(int(step_count + 1)))
+
+
+def generate_trapezoid_motion(distance=10, speed=100, acceleration=1000):
+    """
+    Return a step corresponding to a linear motion.
+
+    distance: distance in mm
+    speed: max speed in mm/s
+    acceleration: max acceleration in mm/s^2
+
+    """
+    # find number of steps
+    step_count = distance * steps_per_mm
+    # find accel if we accel fully
+    # x = 1/2 * a * t^2 = distance / 2
+    # v = a * t
+    # --> t = sqrt(distance / a)
+    # --> v = sqrt(distance * a)
+    max_speed = math.sqrt(distance * acceleration)
+    points = []
+    if max_speed <= speed:
+        # first part (x = 1/2 * a * t^2)
+        a = acceleration
+        for i in range(int(step_count / 2)):
+            # find x at this step point
+            x = i / steps_per_mm
+            # find t at this step
+            t = math.sqrt(2 * x / a)
+            points.append((t, x))
+        # second part: (x = xf - 1/2 * a * (tf-t)^2)
+        # --> 2 * (xf - x) / a = (tf-t)^2
+        tf = 2 * math.sqrt(distance / a)
+        xf = distance
+        for i in range(int(step_count / 2), int(step_count)):
+            x = i / steps_per_mm
+            t = tf - math.sqrt(2 * (xf - x) / a)
+            points.append((t, x))
+    else:
+        pass
+    return points
 
 
 def get_discrete_steps(steps):
@@ -51,15 +110,30 @@ def plot_steps(steps):
 
 def plot_solution(solution, steps=None):
     """Show a plot of the given (t, x, v) data."""
-    # post-process acceleration
-    print(solution)
-    t, x, v = zip(*solution)
-    plt.plot(t, x)
-    plt.ylabel("Position")
-    plt.xlabel("Time")
+    # plot steps behind everything
     if steps:
         t, x = zip(*get_discrete_steps(steps))
         plt.plot(t, x)
+    # read position and velocity
+    t, x, v = zip(*solution)
+    # plot position
+    # plt.plot(t, x)
+    # plot speed
+    # s = [abs(x) for x in v]
+    # plt.plot(t, v)
+    # plot acceleration
+    a = [
+        (v2 - v1) / (t2 - t1)
+        for t1, t2, v1, v2 in zip(t[:-1], t[1:], v[:-1], v[1:])
+    ]
+    a = [x for pair in zip(a, a) for x in pair]
+    ta = [x for pair in zip(t, t) for x in pair]
+    del ta[0]
+    del ta[-1]
+    # ta = [(t1 + t2) / 2 for t1, t2 in zip(t[:-1], t[1:])]
+    plt.plot(ta, a)
+    plt.ylabel("Position")
+    plt.xlabel("Time")
     plt.show()
 
 
@@ -67,7 +141,7 @@ def solve_motion(steps):
     """Solve the system of equations and return (t, x, v) data."""
     assert steps
     # timestep
-    dt0 = 1 / (omega_n * 10)
+    dt0 = 1 / (omega_n * 4 * timestep_divider)
     # initial conditions
     t0, x0 = steps[0]
     v0 = 0
@@ -113,15 +187,24 @@ def solve_motion(steps):
 
 def example():
     """Run an example."""
-    steps = generate_ramp(
-        ramp_time=0.010, amplitude=1, step_count=50, end_time=0.05
-    )
-    print("Ramp is %d points" % len(steps))
-    solution = solve_motion(steps)
-    print("Solution is %d points" % len(solution))
-    plot_solution(solution, steps)
+    if False:
+        steps = generate_ramp(
+            ramp_time=0.010, amplitude=1, step_count=500, end_time=0.05
+        )
+        print("Ramp is %d points" % len(steps))
+        solution = solve_motion(steps)
+        print("Solution is %d points" % len(solution))
+        plot_solution(solution, steps)
+    if True:
+        # plot_steps(generate_motion())
+        # plot_steps(generate_trapezoid_motion())
+        steps = generate_motion()
+        steps = generate_trapezoid_motion()
+        solution = solve_motion(steps)
+        plot_solution(solution, steps)
 
 
 # run example if run as script
 if __name__ == "__main__":
+    plt.close("all")
     example()

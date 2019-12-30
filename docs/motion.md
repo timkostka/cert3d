@@ -56,3 +56,17 @@ We will calculate c based on the perceived damping ratio.  Based on ripples in t
 The unknowns k, c, m can be reduced to just the natural frequency (omega_n) and the damping ratio (zeta).  In these variables, the equation of motion above is equivalent to:
 * x" = omega_n^2 * x - 2 * zeta * omega_n * x'
 
+## In practice
+
+I put together a script (equations_of_motion.py) which solves these equations of motion.  With omega_n = 500 Hz and zeta = 0.15, the position looked very reasonable.
+![](.motion_images/position_vs_time.png.png)
+
+However, the acceleration was still all over the place.
+![](.motion_images/accel_vs_time.png.png)
+
+Zooming in, I can see the acceleration jumps whenever a STEP comes in
+![](.motion_images/zoomed_accel_vs_time.png)
+
+There's no way to avoid this with the parameters I have without significantly lowering the natural frequency of the system.  This may be similar to the actual behavior in real-life, as the printer emits a sound at the frequency of the STEP pulses.  However, it is undesirable for these high frequencies to show up in the simulated equations of motion.
+
+To counteract this, I will first simulate the position of the stepper motor itself and then use this to simulate the position of the hot end.
