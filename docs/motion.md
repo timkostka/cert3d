@@ -106,3 +106,28 @@ Our update then becomes:
 * (and) --> x_n+1 = x_n + dt * (v_n + v_n+1) / 2
 
 ![](.motion_images/update2.png)
+
+## Stepper motor behavior
+
+Here is one page that discusses response to a single step input:
+* https://www.orientalmotor.com/stepper-motors/technology/stepper-motor-overview.html
+
+![](.motion_images/5ddef1e0.png)
+
+![](.motion_images/56cf51d8.png)
+
+The vibration plot is interesting.  Here is a video on it:
+
+* https://www.youtube.com/watch?v=Rv8NVF6ZLlQ
+
+## Dual method results
+
+After simulating both the stepper and the hot end, the results are okay
+
+![](.motion_images/postion_dual_sim.png.png)
+
+However, the forces involved are pretty intense.
+
+![](.motion_images/accel_dual_sim.png.png)
+
+A real stepper motor is going to have a top-end torque after which the force will roll off.  I should simulate the forces from the stepper motor better, and maybe simulate everything at once.  I will likely need to change the method away from the midpoint implicit method.
