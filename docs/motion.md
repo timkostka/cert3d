@@ -59,10 +59,10 @@ The unknowns k, c, m can be reduced to just the natural frequency (omega_n) and 
 ## In practice
 
 I put together a script (equations_of_motion.py) which solves these equations of motion.  With omega_n = 500 Hz and zeta = 0.15, the position looked very reasonable.
-![](.motion_images/position_vs_time.png.png)
+![](.motion_images/position_vs_time.png)
 
 However, the acceleration was still all over the place.
-![](.motion_images/accel_vs_time.png.png)
+![](.motion_images/accel_vs_time.png)
 
 Zooming in, I can see the acceleration jumps whenever a STEP comes in
 ![](.motion_images/zoomed_accel_vs_time.png)
@@ -124,10 +124,10 @@ The vibration plot is interesting.  Here is a video on it:
 
 After simulating both the stepper and the hot end, the results are okay
 
-![](.motion_images/postion_dual_sim.png.png)
+![](.motion_images/postion_dual_sim.png)
 
 However, the forces involved are pretty intense.
 
-![](.motion_images/accel_dual_sim.png.png)
+![](.motion_images/accel_dual_sim.png)
 
 A real stepper motor is going to have a top-end torque after which the force will roll off.  I should simulate the forces from the stepper motor better, and maybe simulate everything at once.  I will likely need to change the method away from the midpoint implicit method.
