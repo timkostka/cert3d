@@ -70,3 +70,39 @@ Zooming in, I can see the acceleration jumps whenever a STEP comes in
 There's no way to avoid this with the parameters I have without significantly lowering the natural frequency of the system.  This may be similar to the actual behavior in real-life, as the printer emits a sound at the frequency of the STEP pulses.  However, it is undesirable for these high frequencies to show up in the simulated equations of motion.
 
 To counteract this, I will first simulate the position of the stepper motor itself and then use this to simulate the position of the hot end.
+
+## Equation derivations
+
+To derive the equation of motion, we start with
+
+* m * x"(t) = k * (x_t(t) - x(t)) - c * x'(t)
+* m * v'(t) = k * (x_t(t) - x(t)) - c * v(t)
+
+where v(t) is the velocity of the hot end, x(t) is the position of the hot end and x_t(t) is the position of the stepper motor (known).  We assume constant v' within a timestep.
+
+* v'(t) = omega_n^2 * (xt(t) - x(t)) - 2 * zeta * omega_n * v(t)
+* v'(t) = f(t, v(t), x(t))
+
+Within a timestep, we know:
+
+* x(t0 + dt) = x(t0) + dt * v(t0) + 1/2 * dt^2 * v'(t) 
+* x_n+1 = x_n + dt * (v_n + v_n+1) / 2
+
+Let v_n = v(t) and v_n+1 = v(t + dt).  Using the implicit midpoint method:
+
+* v_n+1 = v_n + dt * f(t_n + dt / 2, 1/2 * (v_n + v_n+1), 1/2 * (x_n + x_n+1))
+
+Substituting values gives us (Let on = omega_n, z = zeta):
+
+* f(...) = omega_n^2 * (1/2 * (xt_n + xt_n+1) - 1/2 * (x_n + x_n+1)) - 2 * zeta * omega_n * 1/2 * (v_n + v_n+1)
+* f(...) = omega_n^2 * (1/2 * (xt_n + xt_n+1) - 1/2 * (x_n + (x_n + dt * (v_n + v_n+1) / 2))) - 2 * zeta * omega_n * 1/2 * (v_n + v_n+1)
+* f(...) = 1/2 * on^2 * (xt_n + xt_n+1) - 1/2 * on^2 * (2 * x_n + dt * (v_n + v_n+1) / 2) - z * on * v_n - z * on * v_n+1
+* f(...) = 1/2 * on^2 * (xt_n + xt_n+1) + (-(on^2)) * x_n + (-1/4 * on^2 * dt) * v_n + (-1/4 * on^2 * dt) * v_n+1 - z * on * v_n - z * on * v_n+1
+* f(...) = 1/2 * on^2 * (xt_n + xt_n+1) - on^2 * x_n - v_n * (1/4 * on^2 * dt + z * on) - v_n+1 * (z * on + 1/4 * on^2 * dt)
+
+Our update then becomes:
+* v_n+1 = v_n + dt * 1/2 * on^2 * (xt_n + xt_n+1) - dt * on^2 * x_n - dt * v_n * (1/4 * on^2 * dt + z * on) - dt * v_n+1 * (z * on + 1/4 * on^2 * dt)
+* --> v_n+1 = (v_n + dt * 1/2 * on^2 * (xt_n + xt_n+1) - dt * on^2 * x_n - dt * v_n * (1/4 * on^2 * dt + z * on)) / (1 + dt * z * on + 1/4 * dt^2 * on^2)
+* (and) --> x_n+1 = x_n + dt * (v_n + v_n+1) / 2
+
+![](.motion_images/update2.png)
