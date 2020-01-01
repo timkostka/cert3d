@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 
 # stepper motor steps per mm of hotend movement
-steps_per_mm = 2
+steps_per_mm = 80
 
 # natural frequency of the hotend (Hz)
 hotend_frequency = 500
@@ -26,14 +26,21 @@ hotend_damping = 0.15
 hotend_timestep_divider = 10
 
 # natural frequency of the stepper motor (Hz)
-stepper_frequency = 2000
+stepper_frequency = 5000
 
 # damping ratio of stepper motor
-stepper_damping = 0.05
+stepper_damping = 0.95
+
+# natural frequency of the stepper motor (Hz)
+stepper_frequency = 500
+
+# damping ratio of stepper motor
+stepper_damping = 1.0
+
 
 # divisor for stepper timestamp
 # (set to 1 to use default timestep)
-stepper_timestep_divider = 2
+stepper_timestep_divider = 10
 
 
 def generate_ramp(ramp_time=0.25, amplitude=1, step_count=10, end_time=0.5):
@@ -353,9 +360,12 @@ def solve_motion(steps):
 
 def example():
     """Run an example."""
-    steps = generate_motion()
+    # steps = generate_motion()
     steps = generate_trapezoid_motion()
+    steps.append((steps[-1][0] * 1.5, steps[-1][1]))
     stepper, hotend = solve_motion(steps)
+    print("Stepper has %d timesteps" % len(stepper))
+    print("Hot end has %d timesteps" % len(hotend))
     plot_solution_2(steps, stepper, hotend)
 
 

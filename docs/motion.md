@@ -131,3 +131,19 @@ However, the forces involved are pretty intense.
 ![](.motion_images/accel_dual_sim.png)
 
 A real stepper motor is going to have a top-end torque after which the force will roll off.  I should simulate the forces from the stepper motor better, and maybe simulate everything at once.  I will likely need to change the method away from the midpoint implicit method.
+
+## Block method
+
+The new method is to have simulate the hot end and the stepper motor position all at once.  To do so, we form a partial differendial equation (PDE) with the position and velocity of the stepper and hotend as variables.
+
+### Stepper motor force
+
+We will incorporate microstepping into the simulation.  The force from the stepper motor will be in the form of sine wave.  If x is the distance of the stepper away from its neutral position, x_s is the (full) step size of the motor, and F_max is the maximum force, the force from the stepper motor is
+
+* F(x) = -F_max * sin(x / x_s * pi / 2)
+
+Note that the motor achieves a maximum force a distance of x_s away from neutral.
+
+Because of the inductance in the coils, the stepper cannot immediately switch phases.
+
+This is still TBD.
