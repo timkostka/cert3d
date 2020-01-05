@@ -3,11 +3,14 @@ This file shows some examples of our motion post-processing scheme.
 
 In contrast to the other script, this script solves for the position of the stepper motor first, and then solves for the position of the hot end.
 
+We compare methods of moving smoothly from x=0 to x=10.
+
 """
 
 import math
 import ctypes
 
+import numpy
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -43,6 +46,45 @@ stepper_damping = 1.0
 stepper_timestep_divider = 10
 
 
+def solve_cubic(a, b, c, d):
+    """Return real solutions to the equation ax^3 + bx^2 + cx + d == 0."""
+    # import numpy
+    # a = 1.0
+    # b = 0.0
+    # c = 0.2 - 1.0
+    # d = -0.7 * 0.2
+    #
+    # q = (3 * a * c - b ** 2) / (3 * a ** 2)
+    # p = (2 * b ** 3 - 9 * a * b * c - 27 * a ** 2 * d) / (27 * a ** 3)
+    # dis = -(4 * p ** 3 + 27 * q ** 2)
+    # if dis == 0:
+    #     return [-b / (3 * a)]
+    # else:
+    #     rho = (-q ** 3) ** 0.5
+    #     # For x1 the imaginary part is unimportant since it cancels out
+    #     theta = math.acos(r / rho)
+    #     s_real = rho ** (1.0 / 3.0) * math.cos(theta / 3)
+    #     t_real = rho ** (1.0 / 3.0) * math.cos(-theta / 3)
+    #     x1 = s_real + t_real - b / (3.0 * a)
+    #     print("x1 = ", x1)
+    #     x1 = t1 - b / (3 * a)
+    #     return [x1]
+    # else:
+    #     t1 = 3 * q / p
+    #     t2 = -3 * q / (2 * p)
+    #     x1 = t1 - b / (3 * a)
+    #     x2 = t2 - b / (3 * a)
+    #     if x1 == x2:
+    #         return [x1]
+    #     else:
+    #         return [x1, x2]
+    # print("should be zero: ", a * x1 ** 3 + b * x1 ** 2 + c * x1 + d)
+
+
+# print(solve_cubic(0, 0, 0, 0))
+# exit(0)
+
+
 def generate_ramp(ramp_time=0.25, amplitude=1, step_count=10, end_time=0.5):
     """Return a ramp step."""
     steps = []
@@ -55,7 +97,7 @@ def generate_ramp(ramp_time=0.25, amplitude=1, step_count=10, end_time=0.5):
 
 def generate_motion(distance=10, speed=100):
     """
-    Return a step corresponding to a linear motion.
+    Return a step corresponding to a linear motion starting and ending at rest.
 
     distance: distance in mm
     speed: speed in mm/s
@@ -66,7 +108,7 @@ def generate_motion(distance=10, speed=100):
     return list((i * dt, i / steps_per_mm) for i in range(int(step_count + 1)))
 
 
-def generate_trapezoid_motion(distance=10, speed=100, acceleration=1000):
+def generate_trapezoid_motion(distance=10, acceleration=1000):
     """
     Return a step corresponding to a linear motion.
 
@@ -82,27 +124,161 @@ def generate_trapezoid_motion(distance=10, speed=100, acceleration=1000):
     # v = a * t
     # --> t = sqrt(distance / a)
     # --> v = sqrt(distance * a)
-    max_speed = math.sqrt(distance * acceleration)
+    # max_speed = math.sqrt(distance * acceleration)
     points = []
-    if max_speed <= speed:
-        # first part (x = 1/2 * a * t^2)
-        a = acceleration
-        for i in range(int(step_count / 2)):
-            # find x at this step point
-            x = i / steps_per_mm
-            # find t at this step
-            t = math.sqrt(2 * x / a)
-            points.append((t, x))
-        # second part: (x = xf - 1/2 * a * (tf-t)^2)
-        # --> 2 * (xf - x) / a = (tf-t)^2
-        tf = 2 * math.sqrt(distance / a)
-        xf = distance
-        for i in range(int(step_count / 2), int(step_count)):
-            x = i / steps_per_mm
-            t = tf - math.sqrt(2 * (xf - x) / a)
-            points.append((t, x))
-    else:
-        pass
+    # first part (x = 1/2 * a * t^2)
+    a = acceleration
+    for i in range(int(step_count / 2)):
+        # find x at this step point
+        x = i / steps_per_mm
+        # find t at this step
+        t = math.sqrt(2 * x / a)
+        points.append((t, x))
+    # second part: (x = xf - 1/2 * a * (tf-t)^2)
+    # --> 2 * (xf - x) / a = (tf-t)^2
+    tf = 2 * math.sqrt(distance / a)
+    xf = distance
+    for i in range(int(step_count / 2), int(step_count)):
+        x = i / steps_per_mm
+        t = tf - math.sqrt(2 * (xf - x) / a)
+        points.append((t, x))
+    return points
+
+
+def generate_s_motion(distance=10, jerk=16000):
+    """
+    Return a step corresponding to a linear motion.
+
+    This has 4 phases, where jerk is positive, then negative, then negative
+    then positive.
+
+    distance: total distance in mm
+    jerk: max jerk in mm/s^3
+
+    """
+    # for first half of motion:
+    # x = 1/6 * j * t^3
+    # at transition:
+    # x(t) = 1 / 6 * j0 * t ^ 3
+    # At transition, t = tt = sqrt(vf / j0):
+    # From tt <= t <= 2 * tt:
+    # x(t) = 1 / 6 * vf ^ 1.5 * j0 ^ -0.5 + 1 / 2 * vf * (
+    #            t - tt) + 1 / 2 * vf ^ 0.5 * j0 ^ 0.5 * (
+    #                    t - tt) ^ 2 - 1 / 6 * j0 * (t - tt) ^ 3
+    # At t = 2 * tt:
+    # x(2 * tt) = vf ^ 1.5 * j0 ^ -0.5 = 0.5 * distance
+    # -->
+
+    # solve for max speed in center of movement
+    vf = (0.5 * distance * jerk ** 0.5) ** (2 / 3)
+
+    # solve for duration of each movement
+    tt = (vf / jerk) ** 0.5
+    vf1 = 0.5 * jerk * tt ** 2
+    # print("vf =", vf)
+    # print("tt =", tt)
+    # print("vf1 =", vf1)
+    # hold points
+    points = []
+    # solve for steps in first region
+    t0 = 0
+    t1 = tt
+    x0 = 0
+    v0 = 0
+    a0 = 0
+    j0 = jerk
+    s0 = 0
+    # TODO: what should this be?
+    s1 = int(math.ceil(distance * steps_per_mm / 12))
+    dd = 1 / 6 * jerk * tt ** 3
+    for step in range(s0, s1):
+        x = step / steps_per_mm
+        # get cubic coefficients
+        a = 1 / 6 * j0
+        b = 1 / 2 * a0
+        c = v0
+        d = x0 - x
+        #  tx = (6 * x / jerk) ** (1 / 3)
+        # solve for roots
+        times = numpy.roots([a, b, c, d])
+        # take only real solutions
+        times = [x for x in times if numpy.isreal(x)]
+        # take solutions only within time region of interest
+        times = [x for x in times if t0 <= x <= t1]
+        # should be at least one solution
+        assert times
+        # add this solution
+        points.append((times[0].real, x))
+    # update starting pos/vel/acc values
+    x0, v0, a0 = (
+        x0
+        + v0 * (t1 - t0)
+        + 1 / 2 * a0 * (t1 - t0) ** 2
+        + 1 / 6 * j0 * (t1 - t0) ** 3,
+        v0 + a0 * (t1 - t0) + 1 / 2 * j0 * (t1 - t0) ** 2,
+        a0 + j0 * (t1 - t0),
+    )
+    # update range
+    t0 = tt
+    t1 = tt * 3
+    j0 = -jerk
+    s0 = s1
+    s1 = int(math.ceil(distance * steps_per_mm * 11 / 12))
+    for step in range(s0, s1):
+        x = step / steps_per_mm
+        # get cubic coefficients
+        a = 1 / 6 * j0
+        b = 1 / 2 * a0
+        c = v0
+        d = x0 - x
+        # solve for roots
+        times = numpy.roots([a, b, c, d])
+        # take only real solutions
+        times = [x + t0 for x in times if numpy.isreal(x)]
+        # take solutions only within time region of interest
+        times = [x for x in times if t0 <= x <= t1]
+        points.append((times[0].real, x))
+    # update starting pos/vel/acc values
+    x0, v0, a0 = (
+        x0
+        + v0 * (t1 - t0)
+        + 1 / 2 * a0 * (t1 - t0) ** 2
+        + 1 / 6 * j0 * (t1 - t0) ** 3,
+        v0 + a0 * (t1 - t0) + 1 / 2 * j0 * (t1 - t0) ** 2,
+        a0 + j0 * (t1 - t0),
+    )
+    # update range
+    t0 = tt * 3
+    t1 = tt * 4
+    j0 = jerk
+    s0 = s1
+    s1 = int(math.ceil(distance * steps_per_mm))
+    for step in range(s0, s1):
+        x = step / steps_per_mm
+        # get cubic coefficients
+        a = 1 / 6 * j0
+        b = 1 / 2 * a0
+        c = v0
+        d = x0 - x
+        # solve for roots
+        times = numpy.roots([a, b, c, d])
+        # take only real solutions
+        times = [x + t0 for x in times if numpy.isreal(x)]
+        # take solutions only within time region of interest
+        times = [x for x in times if t0 <= x <= t1]
+        points.append((times[0].real, x))
+    print(points)
+    return points
+    exit(0)
+    tt = math.sqrt(speed / jerk)
+    for step in range(int(distance * steps_per_mm / 3.0), int(step_count)):
+        x = step / steps_per_mm
+        a = -1 / 6 * jerk
+        b = 1 / 2 * speed ** 0.5 * jerk ** 0.5
+        c = 1 / 2 * speed
+        d = 1 / 6 * speed ** 1.5 * jerk ** -0.5 - x
+        roots = numpy.roots([a, b, c, d])
+        print(x, tt, roots)
     return points
 
 
@@ -360,8 +536,9 @@ def solve_motion(steps):
 
 def example():
     """Run an example."""
-    # steps = generate_motion()
-    steps = generate_trapezoid_motion()
+    steps = generate_motion(speed=55)
+    # steps = generate_trapezoid_motion(acceleration=1200)
+    steps = generate_s_motion(jerk=50000)
     steps.append((steps[-1][0] * 1.5, steps[-1][1]))
     stepper, hotend = solve_motion(steps)
     print("Stepper has %d timesteps" % len(stepper))
