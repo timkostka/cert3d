@@ -536,9 +536,9 @@ def solve_motion(steps):
 
 def example():
     """Run an example."""
-    steps = generate_motion(speed=55)
-    # steps = generate_trapezoid_motion(acceleration=1200)
-    steps = generate_s_motion(jerk=50000)
+    # steps = generate_motion(speed=55)
+    # steps = generate_trapezoid_motion(distance=100, acceleration=1200)
+    steps = generate_s_motion(distance=100, jerk=50000)
     steps.append((steps[-1][0] * 1.5, steps[-1][1]))
     stepper, hotend = solve_motion(steps)
     print("Stepper has %d timesteps" % len(stepper))
