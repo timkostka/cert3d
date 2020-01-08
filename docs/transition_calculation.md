@@ -69,3 +69,15 @@ Solve to find:
 * `2 * s * cos(theta / 2) / alimit = tramp + tflat`
 * `2 * s * cos(theta / 2) / alimit + alimit / jlimit = 2 * d * sin(theta / 2) / (s * sin(theta / 2))`
 * `--> d = s^2 * cos(theta / 2) / alimit + 0.5 * s * alimit / jlimit`
+
+## Straight line path
+
+For motion in a straight line, assuming we always want to travel as fast as possible, we have the following generic path type:
+
+![generic straight path](generic_straight_path.svg)
+
+Some of these durations may be zero.  For example, if the initial velocity is already at max, `d1 = d2 = d3 = 0`.
+
+We need to create a routine that takes initial speed, final speed, and path distance and calculates the durations for each of these.
+
+Note that we have some symmetry between durations.  In particular, we must have `d1 = d3` and `d4 = d6`.

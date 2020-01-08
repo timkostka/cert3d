@@ -66,6 +66,36 @@ At the transition (t=tt) the speed is:
 
 The speed is minimized halfway through the transition.  This distance from the corner is maximized at this time as well.
 
+## Constant jerk with max accel
+
+With initial velocity v0, max accel amax, max jerk jmax:
+
+Within d1 segment:
+* x(t) = v0 * t + 1 / 6 * jmax * t^3
+
+At t = d1 (Note that d1 = amax / jmax):
+* x(t = d1) = v0 * d1 + 1 / 6 * jmax * d1^3
+* x'(t = d1) = v0 + 1 / 2 * jmax * d1^2
+
+For d1 < t < d1 + d2:
+* x(t) = (v0 + 1 / 2 * amax * d1 ^ 2) * (t - d1) + 1/2 * amax * (t - d1)^2
+* x'(t) = (v0 + 1 / 2 * amax * d1 ^ 2) + amax * (t - d1)
+
+At t = d1 + d2 (Note that d1 = amax / jmax):
+* x(t = d1 + d2) = (v0 + 1 / 2 * amax * d1) * d2 + 1/2 * amax * d2^2
+* x'(t = d1 + d2) = v0 + 1 / 2 * amax * d1 + amax * d2
+
+For d1 + d2 < t < d1 + d2 + d3:
+* x(t) = x'(t = d1 + d2) * (t - d1 - d2) - 1/6 * jmax * (t - d1 - d2)^3
+* x'(t) = x'(t = d1 + d2) - 1/2 * jmax * (t - d1 - d2)^2
+
+At t = d1 + d2 + d3:
+* x(t = d1 + d2 + d3) = (v0 + 1/2 * amax * d1 + amax * d2) * d3 - 1/6 * jmax * d3 ^ 3
+* x'(t = d1 + d2 + d3) = v0 + 1/2 * amax * d1 + amax * d2 - 1/2 * jmax * d3^2
+
+Note that we must have d1 = d3.  We need to find d2 such that x(d1 + d2 + d3) meets the target distance.  This is easy:
+* d2 = (dist - v0 * d1 - 1/2 * amax * d1^2 + 1/6 * jmax * d1 ^ 3) / (amax * d1)
+
 ## Nominal/starting values to for jerk
 
 This section tries to find reasonable values for the jerk setting.  Note that many 3d printer controllers implement a change of velocity of around 10 mm/s which seems extreme but the printer handles it okay.
